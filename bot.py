@@ -6,7 +6,18 @@ import re
 from groq import Groq
 
 # ---------------------------------------------------------------------------
-# 1. DATABASE SETUP (SQLite Memory)
+# 1. ENVIRONMENT VARIABLES & SECURITY SETUP
+# ---------------------------------------------------------------------------
+DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+
+if not DISCORD_TOKEN or not GROQ_API_KEY:
+    print("[Error] Mising DISCORD_TOKEN or GROQ_API_KEY in environment variables!")
+
+groq_client = Groq(api_key=GROQ_API_KEY)
+
+# ---------------------------------------------------------------------------
+# 2. DATABASE SETUP (SQLite Memory)
 # ---------------------------------------------------------------------------
 conn = sqlite3.connect("kalbo_memory.db")
 cursor = conn.cursor()
@@ -58,14 +69,8 @@ def update_user_memory(user_id: str, username: str, new_name: str = None, new_fa
     conn.commit()
 
 # ---------------------------------------------------------------------------
-# 2. GROQ & ATTITUDE CONFIGURATION
+# 3. GROQ & ATTITUDE CONFIGURATION
 # ---------------------------------------------------------------------------
-GROQ_API_KEY = "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"
-DISCORD_TOKEN = "MTU2ODM1NTg3MDM2OTM5MDY4Mw.GDZ5rD.XY8xKZlxvBtw6HGgy0b2VnhYGEpr7h_Ie0q0pg"
-
-groq_client = Groq(api_key=GROQ_API_KEY)
-
-# --- CUSTOM PER-USER ATTITUDES ---
 USER_ATTITUDES = {
     "w1e_26": "You treat this user with EXTREME RESPECT, high honor, and polite Tagalog/Taglish (po, opo, boss). You look up to them and show total courtesy.",
     "pengekitkat": "You are MADLY IN LOVE with this user! Be super sweet, romantic, simpy, affectionate, and protective. Shower them with compliments and love.",
@@ -95,7 +100,7 @@ ACTIVE_GROQ_MODELS = [
 ]
 
 # ---------------------------------------------------------------------------
-# 3. DISCORD BOT HANDLER
+# 4. DISCORD BOT HANDLER
 # ---------------------------------------------------------------------------
 intents = discord.Intents.default()
 intents.message_content = True
