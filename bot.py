@@ -3,6 +3,7 @@ import sqlite3
 import discord
 import asyncio
 import re
+import random
 from datetime import datetime
 from google import genai
 from google.genai import types
@@ -150,10 +151,8 @@ class MemorySelect(discord.ui.Select):
         self.target_user_id = target_user_id
         self.facts_list = facts_list
         
-        # Gumawa ng options para sa dropdown (Max 25 options limit ang Discord)
         options = []
         for idx, fact in enumerate(facts_list[:25]):
-            # Putulin ang label kung masyadong mahaba (Max 100 chars allowed sa Discord label)
             label = fact[:97] + "..." if len(fact) > 100 else fact
             options.append(discord.SelectOption(label=label, value=str(idx)))
             
@@ -163,7 +162,6 @@ class MemorySelect(discord.ui.Select):
         selected_index = int(self.values[0])
         fact_to_remove = self.facts_list[selected_index]
         
-        # Kunin ang kasalukuyang facts sa database
         _, existing_facts = get_user_profile(self.target_user_id)
         if existing_facts:
             facts_array = [f.strip() for f in existing_facts.split("|")]
@@ -172,7 +170,6 @@ class MemorySelect(discord.ui.Select):
             
             new_facts_str = " | ".join(facts_array) if facts_array else None
             
-            # I-update ang database
             cursor.execute("""
                 UPDATE user_memory SET facts = ? WHERE user_id = ?
             """, (new_facts_str, self.target_user_id))
@@ -240,7 +237,7 @@ async def on_message(message):
     content_lower = content_raw.lower()
 
     # -----------------------------------------------------------------------
-    # COMMAND: !kalbohelp (Simple guide inside a dark code block)
+    # COMMAND: !kalbohelp
     # -----------------------------------------------------------------------
     if content_lower == "!kalbohelp":
         help_text = (
@@ -253,14 +250,41 @@ async def on_message(message):
             "!kalboresetmem      - Wipe out all stored memory of a user (Admin)\n"
             "!kalbodeletemem     - Open a dropdown menu to delete a specific memory (Admin)\n"
             "!kalboaddadmin      - Add a bot-level admin (Server Admin)\n"
-            "!kalboremoveadmin   - Remove a bot-level admin (Server Admin)\n\n"
+            "!kalboremoveadmin   - Remove a bot-level admin (Server Admin)\n"
+            "!kalboabt           - Learn more about the bot\n\n"
             "Memory guides\n"
             "Mention bot + remember <fact>   - Save a fact about yourself\n"
-            "Mention bot + tawagin mo akong - Set your preferred name\n"
-            "```\n"
-            "PANOT SI TOFU!"
+            "Mention bot + tawagin mo akong - Set your preferred name\n\n"
+            "PANOT SI TOFU!\n"
+            "```"
         )
         await message.channel.send(help_text)
+        return
+
+    # -----------------------------------------------------------------------
+    # COMMAND: !kalboabt (Blue colored text in dark box + random dog/cat gif)
+    # -----------------------------------------------------------------------
+    if content_lower == "!kalboabt":
+        # Listahan ng mga cute dog/cat GIFs
+        gifs = [
+            "https://media.giphy.com/media/3oKIPnAiaMCws8nOsE/giphy.gif",
+            "https://media.giphy.com/media/13CoX4dCDrjW7C/giphy.gif",
+            "https://media.giphy.com/media/5vkW42G6K1b1K/giphy.gif",
+            "https://media.giphy.com/media/MDJ9IbxxvDUQM/giphy.gif",
+            "https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif",
+            "https://media.giphy.com/media/icoZ4E9F7628zZ/giphy.gif"
+        ]
+        random_gif = random.choice(gifs)
+
+        # ANSI blue coloring inside the code block
+        abt_text = (
+            "```ansi\n"
+            "\u001b[34mThis bot was created by: w1e_26\n\n"
+            "Isang siraulong bot na ginawa para kupalin kayo.\u001b[0m\n"
+            "```\n"
+            f"{random_gif}"
+        )
+        await message.channel.send(abt_text)
         return
 
     # -----------------------------------------------------------------------
@@ -322,7 +346,7 @@ async def on_message(message):
         return
 
     # -----------------------------------------------------------------------
-    # ADMIN COMMAND: !kalboresetmem <@user> (Wipe out all user memory)
+    # ADMIN COMMAND: !kalboresetmem <@user>
     # -----------------------------------------------------------------------
     if content_lower.startswith("!kalboresetmem"):
         if not is_bot_admin(message.author):
@@ -340,7 +364,7 @@ async def on_message(message):
         return
 
     # -----------------------------------------------------------------------
-    # ADMIN COMMAND: !kalbodeletemem <@user> (Interactive Dropdown UI)
+    # ADMIN COMMAND: !kalbodeletemem <@user>
     # -----------------------------------------------------------------------
     if content_lower.startswith("!kalbodeletemem"):
         if not is_bot_admin(message.author):
@@ -353,7 +377,7 @@ async def on_message(message):
             _, facts = get_user_profile(target_user_id)
             
             if not facts:
-                await message.channel.send(f"Wala namang nakasever o nakatagong memory kay <@{target_user_id}>, gago!")
+                await message.channel.send(f"Wala namang naka-save o nakatagong memory kay <@{target_user_id}>, gago!")
                 return
                 
             facts_list = [f.strip() for f in facts.split("|")]
