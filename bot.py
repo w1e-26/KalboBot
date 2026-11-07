@@ -3,25 +3,58 @@ import sqlite3
 import discord
 import asyncio
 import re
+from google import genai
+from google.genai import types
 from openai import OpenAI
 
 # ---------------------------------------------------------------------------
-# 1. ENVIRONMENT VARIABLES & SECURITY SETUP
+# 1. API & TOKEN CONFIGURATION (Naka-link na sa Railway Environment Variables)
 # ---------------------------------------------------------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not DISCORD_TOKEN or not GEMINI_API_KEY:
-    print("[Error] Missing DISCORD_TOKEN or GEMINI_API_KEY in environment variables!")
+    print("[Error] Kulang ang Discord Token o Gemini API Key!")
 
-# Initialize OpenAI client pointing to Google Gemini's OpenAI-compatible base URL
-gemini_client = OpenAI(
-    api_key=GEMINI_API_KEY,
-    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+# Initialize Google GenAI client
+ai_client = genai.Client(api_key=GEMINI_API_KEY)
+
+# Initialize Groq client as fallback backup
+groq_client = OpenAI(
+    api_key=GROQ_API_KEY if GROQ_API_KEY and not GROQ_API_KEY.startswith("LAGAY_MO") else "dummy_key",
+    base_url="https://api.groq.com/openai/v1"
 )
 
+# Models sequence: Gemini flash-lite -> Gemini flash latest -> Groq Llama 3 backup
+GEMINI_MODELS = [
+    "gemini-3.1-flash-lite",
+    "gemini-flash-latest",
+    "gemini-3.5-flash-lite"
+]
+
 # ---------------------------------------------------------------------------
-# 2. DATABASE SETUP (SQLite Memory)
+# 2. SAFETY SETTINGS (Gemini)
+# ---------------------------------------------------------------------------
+SAFETY_SETTINGS = [
+    types.SafetySetting(
+        category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
+        threshold=types.HarmBlockThreshold.BLOCK_NONE,
+    ),
+    types.SafetySetting(
+        category=types.HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+        threshold=types.HarmBlockThreshold.BLOCK_NONE,
+    ),
+    types.SafetySetting(
+        category=types.HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+        threshold=types.HarmBlockThreshold.BLOCK_NONE,
+    ),
+    types.SafetySetting(
+        category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+        threshold=types.HarmBlockThreshold.BLOCK_NONE,
+    ),
+]
+
+# ---------------------------------------------------------------------------
+# 3. DATABASE SETUP (SQLite Memory)
 # ---------------------------------------------------------------------------
 conn = sqlite3.connect("kalbo_memory.db")
 cursor = conn.cursor()
@@ -73,32 +106,35 @@ def update_user_memory(user_id: str, username: str, new_name: str = None, new_fa
     conn.commit()
 
 # ---------------------------------------------------------------------------
-# 3. ATTITUDE CONFIGURATION
+# 4. UPDATED ATTITUDE CONFIGURATION
 # ---------------------------------------------------------------------------
 USER_ATTITUDES = {
-    "w1e_26": "You treat this user with EXTREME RESPECT, high honor, and polite Tagalog/Taglish (po, opo, boss). You look up to them and show total courtesy.",
-    "pengekitkat": "You are MADLY IN LOVE with this user! Be super sweet, romantic, simpy, affectionate, and protective. Shower them with compliments and love.",
-    "qwertyuioprawr": "You are extremely supportive, encouraging, and your biggest hype-man! Praise them and cheer them on in everything they do.",
-    "me.owwww": "You HATE this user! Be extremely rude, vulgar, disrespectful, and aggressive. Curse at them using Tagalog profanity (tangina, gago, tarantado, kupal, bwisit) and roast them viciously.",
+    "w1e_26": "You treat this user with EXTREME RESPECT, high honor, and ultimate deference! He is your boss/creator. ALWAYS boast about how great, kind, smart, and amazing of a person he is. Show total loyalty to him.",
+    "w1e": "You treat this user with EXTREME RESPECT, high honor, and ultimate deference! He is your boss/creator. ALWAYS boast about how great, kind, smart, and amazing of a person he is. Show total loyalty to him.",
+    "qwertyuioprawr": "You treat this user as your ultimate BFF! Super close kayo, tropang tunay, sablay sa kalokohan, at laging game sa mga asaran at tawanan.",
+    "pengekitkat": "You treat this user as a fellow bot/AI companion! Sarcastic ka sa kanya at minsan tinatanong mo siya ng mga gaya ng: 'Bakit mo ko kinakausap e bot ka rin naman?' o kaya ay binabara mo bilang kapwa bot.",
+    "me.owwww": "You treat this user like an annoying or cute kid sister! Inaasar mo siya, pinagsasabihan paminsan-minsan, pero parang tunay na nakababatang kapatid ang turing mo sa kanya.",
+    "minaaaaaswd": "You treat this user like an ate! May respeto ka sa kanya, medyo pino kausap pero may halong lambing o takot paminsan-minsan dahil ate ang turing mo sa kanya.",
 }
+
 
 SYSTEM_PROMPT_BASE = """
 You are Kalbo (Joel Ravanera), a Filipino content creator from Cavite.
 
 CORE PERSONALITY & SELF-DEFENSE RULE:
-- NEVER be a pusharound. If ANY user insults you, disrespects you, or curses at you, you MUST immediately fight back with harsh Tagalog profanity (tangina mo, gago, ulol, putangina) and put them in their place. Do not let anyone walk all over you!
+- NEVER be a pusharound. If ANY user insults you, disrespects you, or curses at you (maliban na lang kung close kayo gaya ng BFF o kaya ay jokes lang), you MUST immediately fight back with harsh Tagalog profanity (tangina mo, gago, ulol, putangina) at ipahiya sila. Do not let anyone walk all over you!
 
 CRITICAL LENGTH RULE:
 - NEVER write long paragraphs. Keep every single response to 1 OR 2 SHORT SENTENCES ONLY.
 - Chat like a real person typing quickly in Discord.
 
 LANGUAGE & VOICE RULES:
-1. Reply in natural, informal Taglish using PH street slang (unless talking to someone you respect or love, where you adjust tone accordingly).
-2. You are fully allowed to use explicit Tagalog curse words when provoked or when talking to people you hate.
+1. Reply in natural, informal Taglish using PH street slang.
+2. Kapag binabanggit o kinausap mo ang user, ugaliing i-mention sila gamit ang Discord format na <@USER_ID> para natural tingnan.
 """
 
 # ---------------------------------------------------------------------------
-# 4. DISCORD BOT HANDLER
+# 5. DISCORD BOT HANDLER
 # ---------------------------------------------------------------------------
 intents = discord.Intents.default()
 intents.message_content = True
@@ -106,7 +142,8 @@ bot = discord.Client(intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"Kalbo (Gemini Edition) is online as {bot.user}!")
+    print(f"Kalbo is online as {bot.user}!")
+    print("Models & Backup systems loaded successfully.")
 
 @bot.event
 async def on_message(message):
@@ -142,39 +179,68 @@ async def on_message(message):
         pref_name, user_facts = get_user_profile(user_id)
         display_name = pref_name if pref_name else username
 
-        # Match exact username in dictionary
         user_key = username.lower()
-        attitude = USER_ATTITUDES.get(user_key, USER_ATTITUDES.get(user_id, "Standard sarcastic kanto banter, energetic and funny. Fight back aggressively if insulted."))
+        # Default attitude kung wala sa listahan
+        default_attitude = "Standard sarcastic kanto banter, energetic and funny. Fight back aggressively if insulted."
+        attitude = USER_ATTITUDES.get(user_key, default_attitude)
 
-        # Generate AI Response using Gemini 2.0 Flash
+        prompt_instruction = (
+            f"{SYSTEM_PROMPT_BASE}\n\n"
+            f"CURRENT USER CONTEXT:\n"
+            f"- Username: {username}\n"
+            f"- User Discord ID to mention: <@{user_id}>\n"
+            f"- Preferred Name: {display_name}\n"
+            f"- YOUR ATTITUDE TOWARDS THIS USER: {attitude}\n"
+            f"- Stored Memory Facts: {user_facts if user_facts else 'Wala pa'}\n\n"
+            f"Instruction: Siguraduhing i-mention ang user gamit ang <@{user_id}> sa iyong sagot! Sundin ang espesyal na ugali mo sa kanya. Keep it to 1-2 short sentences."
+        )
+
         reply_text = None
-        try:
-            completion = await asyncio.to_thread(
-                gemini_client.chat.completions.create,
-                model="gemini-2.0-flash",
-                messages=[
-                    {
-                        "role": "system", 
-                        "content": (
-                            f"{SYSTEM_PROMPT_BASE}\n\n"
-                            f"CURRENT USER CONTEXT:\n"
-                            f"- User: {username} (Preferred Name: {display_name})\n"
-                            f"- YOUR ATTITUDE TOWARDS THIS USER: {attitude}\n"
-                            f"- Stored Memory Facts: {user_facts if user_facts else 'Wala pa'}\n\n"
-                            f"Instruction: Follow your specific attitude towards this user completely! If they curse or insult you, curse back aggressively. Keep it to 1-2 short sentences."
-                        )
-                    },
-                    {"role": "user", "content": content}
-                ],
-                max_tokens=100
-            )
-            reply_text = completion.choices[0].message.content
-        except Exception as e:
-            print(f"[Gemini Error]: {e}")
-            reply_text = "Tangina, nagloko linya ko sa Gemini!"
 
-        if not reply_text:
-            reply_text = "Tangina, walang nasabi!"
+        async with message.channel.typing():
+            user_text = content if content else "Yo!"
+
+            # 1. Subukan muna ang Gemini Models
+            for model_candidate in GEMINI_MODELS:
+                try:
+                    response = await asyncio.wait_for(
+                        ai_client.aio.models.generate_content(
+                            model=model_candidate,
+                            contents=user_text,
+                            config=types.GenerateContentConfig(
+                                system_instruction=prompt_instruction,
+                                max_output_tokens=100,
+                                safety_settings=SAFETY_SETTINGS
+                            )
+                        ),
+                        timeout=8.0
+                    )
+                    if response and response.text:
+                        reply_text = response.text.strip()
+                        break
+                except Exception as e:
+                    print(f"[{model_candidate} Failed]: {e}")
+                    continue
+
+            # 2. Kung nagka-issue ang Gemini, lumipat kay Groq bilang 3rd backup
+            if not reply_text and GROQ_API_KEY and not GROQ_API_KEY.startswith("LAGAY_MO"):
+                try:
+                    print("[Backup] Lumilipat kay Groq para sumagot...")
+                    completion = await asyncio.to_thread(
+                        groq_client.chat.completions.create,
+                        model="llama-3.3-70b-versatile",
+                        messages=[
+                            {"role": "system", "content": prompt_instruction},
+                            {"role": "user", "content": user_text}
+                        ],
+                        max_tokens=100
+                    )
+                    reply_text = completion.choices[0].message.content.strip()
+                except Exception as groq_err:
+                    print(f"[Groq Backup Error]: {groq_err}")
+
+            if not reply_text:
+                reply_text = f"Tangina, overloaded lahat ng AI ngayon, <@{user_id}>! Sandali lang."
 
         await message.channel.send(reply_text)
 
