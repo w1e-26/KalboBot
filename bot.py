@@ -57,17 +57,26 @@ SAFETY_SETTINGS = [
 ]
 
 # ---------------------------------------------------------------------------
-# 3. DATABASE SETUP (SQLite Memory for User Facts)
+# 3. DATABASE SETUP (SQLite Memory & Dynamic Attitudes)
 # ---------------------------------------------------------------------------
 conn = sqlite3.connect("kalbo_memory.db")
 cursor = conn.cursor()
 
+# Table para sa user memory (names/facts)
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS user_memory (
     user_id TEXT PRIMARY KEY,
     username TEXT,
     preferred_name TEXT,
     facts TEXT
+)
+""")
+
+# Table para sa dynamic attitudes na pwedeng i-configure via command
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS server_attitudes (
+    user_id TEXT PRIMARY KEY,
+    attitude TEXT
 )
 """)
 conn.commit()
@@ -108,32 +117,39 @@ def update_user_memory(user_id: str, username: str, new_name: str = None, new_fa
     """, (user_id, username, final_name, final_facts))
     conn.commit()
 
+# Functions para sa Dynamic Attitudes Database
+def get_user_attitude(user_id: str):
+    cursor.execute("SELECT attitude FROM server_attitudes WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    if row:
+        return row[0]
+    # Default attitude kung wala pang naseset na custom
+    return "Standard sarcastic kanto banter, energetic and funny. Answer the question properly first, then roast them."
+
+def set_user_attitude(user_id: str, attitude: str):
+    cursor.execute("""
+        INSERT INTO server_attitudes (user_id, attitude) 
+        VALUES (?, ?)
+        ON CONFLICT(user_id) DO UPDATE SET attitude = excluded.attitude
+    """, (user_id, attitude))
+    conn.commit()
+
 # ---------------------------------------------------------------------------
-# 4. CONVERSATION HISTORY BUFFER (Recent messages per channel)
+# 4. CONVERSATION HISTORY BUFFER
 # ---------------------------------------------------------------------------
 channel_histories = {}
-MAX_HISTORY_LENGTH = 10  # Huling 10 messages lang ang aalalahanin para hindi sumabog ang token limit
+MAX_HISTORY_LENGTH = 10
 
 def add_to_history(channel_id, role, text):
     if channel_id not in channel_histories:
         channel_histories[channel_id] = []
     channel_histories[channel_id].append({"role": role, "text": text})
-    # Panatilihing nasa takdang haba lang
     if len(channel_histories[channel_id]) > MAX_HISTORY_LENGTH:
         channel_histories[channel_id].pop(0)
 
 # ---------------------------------------------------------------------------
-# 5. ATTITUDE & SYSTEM PROMPT CONFIGURATION
+# 5. SYSTEM PROMPT CONFIGURATION
 # ---------------------------------------------------------------------------
-USER_ATTITUDES = {
-    "w1e_26": "You treat this user with EXTREME RESPECT, high honor, and ultimate deference! He is your boss/creator. ALWAYS boast about how great, kind, smart, and amazing of a person he is. Show total loyalty to him.",
-    "w1e": "You treat this user with EXTREME RESPECT, high honor, and ultimate deference! He is your boss/creator. ALWAYS boast about how great, kind, smart, and amazing of a person he is. Show total loyalty to him.",
-    "qwertyuioprawr": "You treat this user as your ultimate BFF! Super close kayo, tropang tunay, sablay sa kalokohan, at laging game sa mga asaran at tawanan.",
-    "pengekitkat": "You treat this user as a fellow bot/AI companion! Sarcastic ka sa kanya at minsan tinatanong mo siya ng mga gaya ng: 'Bakit mo ko kinakausap e bot ka rin naman?' o kaya ay binabara mo bilang kapwa bot.",
-    "me.owwww": "You treat this user like an annoying or cute kid sister! Inaasar mo siya, pinagsasabihan paminsan-minsan, pero parang tunay na nakababatang kapatid ang turing mo sa kanya.",
-    "minaaaaaswd": "You treat this user like an ate! May respeto ka sa kanya, medyo pino kausap pero may halong lambing o takot paminsan-minsan dahil ate ang turing mo sa kanya.",
-}
-
 SYSTEM_PROMPT_BASE = """
 You are Kalbo (Joel Ravanera), a Filipino content creator from Cavite.
 
@@ -160,18 +176,45 @@ bot = discord.Client(intents=intents)
 @bot.event
 async def on_ready():
     print(f"Kalbo is online as {bot.user}!")
-    print("Models, Live Clock & Conversation History loaded successfully.")
+    print("Database-backed dynamic attitudes & live history loaded successfully.")
 
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
         return
 
+    content_raw = message.content.strip()
+    content_lower = content_raw.lower()
+
+    # -----------------------------------------------------------------------
+    # ADMIN COMMAND: !setattitude <@user> <bagong ugali>
+    # -----------------------------------------------------------------------
+    if content_lower.startswith("!setattitude"):
+        # Suriin kung ang gumagamit ay Administrator
+        if not message.author.guild_permissions.administrator:
+            await message.channel.send(f"Ulol, <@{message.author.id}>, hindi ka admin para galawin ang ugali ko!")
+            return
+
+        # I-parse ang command gamit ang regex para makuha ang target user mention at ang bagong attitude text
+        match = re.search(r'!setattitude\s+<@!?(\d+)>\s+(.+)', content_raw, re.DOTALL)
+        if match:
+            target_user_id = match.group(1)
+            new_attitude = match.group(2).strip()
+
+            set_user_attitude(target_user_id, new_attitude)
+            await message.channel.send(f"Na-update ko na ang ugali ko kay <@{target_user_id}>, boss!")
+        else:
+            await message.channel.send("Mali ang format, gago! Gamitin mo: `!setattitude @user <ugali>`")
+        return
+
+    # -----------------------------------------------------------------------
+    # NORMAL MENTION & CHAT HANDLER
+    # -----------------------------------------------------------------------
     if bot.user.mentioned_in(message):
         user_id = str(message.author.id)
         username = message.author.name
         channel_id = message.channel.id
-        content = message.content.replace(f'<@{bot.user.id}>', '').strip()
+        content = content_raw.replace(f'<@{bot.user.id}>', '').strip()
         content_lower = content.lower()
 
         # Name & Fact Extraction
@@ -197,9 +240,8 @@ async def on_message(message):
         pref_name, user_facts = get_user_profile(user_id)
         display_name = pref_name if pref_name else username
 
-        user_key = username.lower()
-        default_attitude = "Standard sarcastic kanto banter, energetic and funny. Answer the question properly first, then roast them."
-        attitude = USER_ATTITUDES.get(user_key, default_attitude)
+        # Kunin ang custom attitude ng user na ito mula sa SQLite database
+        attitude = get_user_attitude(user_id)
 
         # Real-time timestamp
         current_time_str = datetime.now().strftime("%B %d, %Y (%A), %I:%M %p")
@@ -215,27 +257,22 @@ async def on_message(message):
             f"- Preferred Name: {display_name}\n"
             f"- YOUR ATTITUDE TOWARDS THIS USER: {attitude}\n"
             f"- Stored Memory Facts: {user_facts if user_facts else 'Wala pa'}\n\n"
-            f"Instruction: Sagutin nang tama at tumpak ang tanong gamit ang kasalukuyang petsa, pero asarin/barahin ang user sa dulo. Huwag kalimutang i-mention siya gamit ang <@{user_id}>! Keep it to 1-2 short sentences."
+            f"Instruction: Sagutin nang tama at tumpak ang tanong gamit ang kasalukuyang petsa, pero asarin/barahin ang user ayon sa iyong attitude sa kanya. Huwag kalimutang i-mention siya gamit ang <@{user_id}>! Keep it to 1-2 short sentences."
         )
 
-        # I-save ang mensahe ng user sa history buffer
         user_text = content if content else "Yo!"
         add_to_history(channel_id, "user", f"{username}: {user_text}")
-
-        # Kunin ang buong nakaraang usapan sa channel na ito
         history = channel_histories.get(channel_id, [])
 
         reply_text = None
 
         async with message.channel.typing():
-            # 1. Subukan muna ang Gemini Models (Gamit ang contents history format)
+            # 1. Gemini Models
             for model_candidate in GEMINI_MODELS:
                 try:
-                    # Buuin ang serye ng usapan para kay Gemini
                     gemini_contents = []
-                    for h in history[:-1]: # Lahat maliban sa pinaka-huli
+                    for h in history[:-1]:
                         gemini_contents.append(f"{h['role'].upper()}: {h['text']}")
-                    # Ang huling mensahe ang mismong current prompt
                     gemini_contents.append(user_text)
 
                     response = await asyncio.wait_for(
@@ -257,13 +294,12 @@ async def on_message(message):
                     print(f"[{model_candidate} Failed]: {e}")
                     continue
 
-            # 2. Kung nagka-issue ang Gemini, lumipat kay Groq bilang 3rd backup (Gamit ang OpenAI messages format)
+            # 2. Groq Backup
             if not reply_text and GROQ_API_KEY:
                 try:
                     print("[Backup] Lumilipat kay Groq para sumagot...")
                     groq_messages = [{"role": "system", "content": prompt_instruction}]
                     
-                    # Ipasa ang buong nakaraang usapan kay Groq
                     for h in history[:-1]:
                         role_val = "user" if h["role"] == "user" else "assistant"
                         groq_messages.append({"role": role_val, "content": h["text"]})
@@ -283,9 +319,7 @@ async def on_message(message):
             if not reply_text:
                 reply_text = f"Tangina, overloaded lahat ng AI ngayon, <@{user_id}>! Sandali lang."
 
-        # I-save ang sagot ni Kalbo sa history buffer para maalala niya sa susunod na reply
         add_to_history(channel_id, "assistant", reply_text)
-
         await message.channel.send(reply_text)
 
 bot.run(DISCORD_TOKEN)
