@@ -225,4 +225,23 @@ async def on_message(message):
             # 2. Kung nagka-issue ang Gemini, lumipat kay Groq bilang 3rd backup
             if not reply_text and GROQ_API_KEY:
                 try:
-                    print("[Backup] Lumilipat
+                    print("[Backup] Lumilipat kay Groq para sumagot...")
+                    completion = await asyncio.to_thread(
+                        groq_client.chat.completions.create,
+                        model="llama-3.3-70b-versatile",
+                        messages=[
+                            {"role": "system", "content": prompt_instruction},
+                            {"role": "user", "content": user_text}
+                        ],
+                        max_tokens=100
+                    )
+                    reply_text = completion.choices[0].message.content.strip()
+                except Exception as groq_err:
+                    print(f"[Groq Backup Error]: {groq_err}")
+
+            if not reply_text:
+                reply_text = f"Tangina, overloaded lahat ng AI ngayon, <@{user_id}>! Sandali lang."
+
+        await message.channel.send(reply_text)
+
+bot.run(DISCORD_TOKEN)
