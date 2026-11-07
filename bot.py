@@ -186,21 +186,21 @@ async def on_message(message):
     content_lower = content_raw.lower()
 
     # -----------------------------------------------------------------------
-    # COMMAND: !help (English Instructions for all features & commands)
+    # COMMAND: !kalbohelp (English Instructions for all features & commands)
     # -----------------------------------------------------------------------
-    if content_lower == "!help":
+    if content_lower == "!kalbohelp":
         help_text = (
             "**🤖 Kalbo Bot - Command Center & Guide**\n\n"
             "Here are the available commands and instructions on how to use them:\n\n"
-            "1. **`!help`**\n"
+            "1. **`!kalbohelp`**\n"
             "   - *Description:* Displays this help menu containing all commands and usage guidelines.\n\n"
-            "2. **`!setattitude @user <custom prompt>`** *(Admin Only)*\n"
+            "2. **`!kalboshop @user <custom prompt>`** *(Admin Only)*\n"
             "   - *Description:* Sets or updates a custom personality/attitude for a specific user. Kalbo will dynamically adjust how he roasts or treats that user.\n"
-            "   - *Example:* `!setattitude @username You treat this user like royalty and speak with extreme respect.`\n\n"
-            "3. **`!resetattitude @user`** *(Admin Only)*\n"
+            "   - *Example:* `!kalboshop @username You treat this user like royalty and speak with extreme respect.`\n\n"
+            "3. **`!kalboreset @user`** *(Admin Only)*\n"
             "   - *Description:* Removes the custom attitude assigned to a user and reverts them back to the default sarcastic roasting persona.\n"
-            "   - *Example:* `!resetattitude @username`\n\n"
-            "4. **`!attitudelist`** or **`!listattitude`**\n"
+            "   - *Example:* `!kalboreset @username`\n\n"
+            "4. **`!kalbolist`**\n"
             "   - *Description:* Lists all users who currently have custom attitudes configured in the database along with their assigned prompts.\n\n"
             "5. **Memory & Naming Commands** *(Mention the bot to use)*\n"
             "   - **Remembering Facts:** Type `@Kalbo remember <your fact>` or include phrases like *'tandaan mo'*, *'paborito ko'*, or *'main ko'* when mentioning the bot.\n"
@@ -210,14 +210,14 @@ async def on_message(message):
         return
 
     # -----------------------------------------------------------------------
-    # ADMIN COMMAND: !setattitude <@user> <bagong ugali>
+    # ADMIN COMMAND: !kalboshop <@user> <bagong ugali>
     # -----------------------------------------------------------------------
-    if content_lower.startswith("!setattitude"):
+    if content_lower.startswith("!kalboshop"):
         if not message.author.guild_permissions.administrator:
             await message.channel.send(f"Ulol, <@{message.author.id}>, hindi ka admin para galawin ang ugali ko!")
             return
 
-        match = re.search(r'!setattitude\s+<@!?(\d+)>\s+(.+)', content_raw, re.DOTALL)
+        match = re.search(r'!kalboshop\s+<@!?(\d+)>\s+(.+)', content_raw, re.DOTALL)
         if match:
             target_user_id = match.group(1)
             new_attitude = match.group(2).strip()
@@ -225,31 +225,31 @@ async def on_message(message):
             set_user_attitude(target_user_id, new_attitude)
             await message.channel.send(f"Na-update ko na ang ugali ko kay <@{target_user_id}>, boss!")
         else:
-            await message.channel.send("Mali ang format, gago! Gamitin mo: `!setattitude @user <ugali>`")
+            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboshop @user <ugali>`")
         return
 
     # -----------------------------------------------------------------------
-    # ADMIN COMMAND: !resetattitude <@user>
+    # ADMIN COMMAND: !kalboreset <@user>
     # -----------------------------------------------------------------------
-    if content_lower.startswith("!resetattitude"):
+    if content_lower.startswith("!kalboreset"):
         if not message.author.guild_permissions.administrator:
             await message.channel.send(f"Ulol, <@{message.author.id}>, bawal ka mag-reset!")
             return
 
-        match = re.search(r'!resetattitude\s+<@!?(\d+)>', content_raw)
+        match = re.search(r'!kalboreset\s+<@!?(\d+)>', content_raw)
         if match:
             target_user_id = match.group(1)
             cursor.execute("DELETE FROM server_attitudes WHERE user_id = ?", (target_user_id,))
             conn.commit()
             await message.channel.send(f"Binura ko na ang special treatment kay <@{target_user_id}>, balik sa dati 'yan!")
         else:
-            await message.channel.send("Mali ang format, gago! Gamitin mo: `!resetattitude @user`")
+            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboreset @user`")
         return
 
     # -----------------------------------------------------------------------
-    # COMMAND: !attitudelist
+    # COMMAND: !kalbolist
     # -----------------------------------------------------------------------
-    if content_lower.startswith("!attitudelist") or content_lower.startswith("!listattitude"):
+    if content_lower.startswith("!kalbolist"):
         cursor.execute("SELECT user_id, attitude FROM server_attitudes")
         rows = cursor.fetchall()
         
@@ -377,4 +377,7 @@ async def on_message(message):
             if not reply_text:
                 reply_text = f"Tangina, overloaded lahat ng AI ngayon, <@{user_id}>! Sandali lang."
 
-        add_to_history(channel_id, "assistant", reply_text
+        add_to_history(channel_id, "assistant", reply_text)
+        await message.channel.send(reply_text)
+
+bot.run(DISCORD_TOKEN)
