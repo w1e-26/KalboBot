@@ -3,18 +3,22 @@ import sqlite3
 import discord
 import asyncio
 import re
-from groq import Groq
+from openai import OpenAI
 
 # ---------------------------------------------------------------------------
 # 1. ENVIRONMENT VARIABLES & SECURITY SETUP
 # ---------------------------------------------------------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-if not DISCORD_TOKEN or not GROQ_API_KEY:
-    print("[Error] Mising DISCORD_TOKEN or GROQ_API_KEY in environment variables!")
+if not DISCORD_TOKEN or not GEMINI_API_KEY:
+    print("[Error] Missing DISCORD_TOKEN or GEMINI_API_KEY in environment variables!")
 
-groq_client = Groq(api_key=GROQ_API_KEY)
+# Initialize OpenAI client pointing to Google Gemini's OpenAI-compatible base URL
+gemini_client = OpenAI(
+    api_key=GEMINI_API_KEY,
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+)
 
 # ---------------------------------------------------------------------------
 # 2. DATABASE SETUP (SQLite Memory)
@@ -69,7 +73,7 @@ def update_user_memory(user_id: str, username: str, new_name: str = None, new_fa
     conn.commit()
 
 # ---------------------------------------------------------------------------
-# 3. GROQ & ATTITUDE CONFIGURATION
+# 3. ATTITUDE CONFIGURATION
 # ---------------------------------------------------------------------------
 USER_ATTITUDES = {
     "w1e_26": "You treat this user with EXTREME RESPECT, high honor, and polite Tagalog/Taglish (po, opo, boss). You look up to them and show total courtesy.",
@@ -93,12 +97,6 @@ LANGUAGE & VOICE RULES:
 2. You are fully allowed to use explicit Tagalog curse words when provoked or when talking to people you hate.
 """
 
-ACTIVE_GROQ_MODELS = [
-    "openai/gpt-oss-120b",
-    "qwen/qwen3.8-27b",
-    "openai/gpt-oss-20b"
-]
-
 # ---------------------------------------------------------------------------
 # 4. DISCORD BOT HANDLER
 # ---------------------------------------------------------------------------
@@ -108,7 +106,7 @@ bot = discord.Client(intents=intents)
 
 @bot.event
 async def on_ready():
-    print(f"Kalbo (Custom Attitude Edition) is online as {bot.user}!")
+    print(f"Kalbo (Gemini Edition) is online as {bot.user}!")
 
 @bot.event
 async def on_message(message):
@@ -148,38 +146,35 @@ async def on_message(message):
         user_key = username.lower()
         attitude = USER_ATTITUDES.get(user_key, USER_ATTITUDES.get(user_id, "Standard sarcastic kanto banter, energetic and funny. Fight back aggressively if insulted."))
 
-        # Generate AI Response
+        # Generate AI Response using Gemini 2.0 Flash
         reply_text = None
-        for model_name in ACTIVE_GROQ_MODELS:
-            try:
-                completion = await asyncio.to_thread(
-                    groq_client.chat.completions.create,
-                    model=model_name,
-                    messages=[
-                        {
-                            "role": "system", 
-                            "content": (
-                                f"{SYSTEM_PROMPT_BASE}\n\n"
-                                f"CURRENT USER CONTEXT:\n"
-                                f"- User: {username} (Preferred Name: {display_name})\n"
-                                f"- YOUR ATTITUDE TOWARDS THIS USER: {attitude}\n"
-                                f"- Stored Memory Facts: {user_facts if user_facts else 'Wala pa'}\n\n"
-                                f"Instruction: Follow your specific attitude towards this user completely! If they curse or insult you, curse back aggressively. Keep it to 1-2 short sentences."
-                            )
-                        },
-                        {"role": "user", "content": content}
-                    ],
-                    max_tokens=100
-                )
-                reply_text = completion.choices[0].message.content
-                if reply_text:
-                    break
-            except Exception as e:
-                print(f"[Groq Warning] Model '{model_name}' failed: {e}")
-                continue
+        try:
+            completion = await asyncio.to_thread(
+                gemini_client.chat.completions.create,
+                model="gemini-2.0-flash",
+                messages=[
+                    {
+                        "role": "system", 
+                        "content": (
+                            f"{SYSTEM_PROMPT_BASE}\n\n"
+                            f"CURRENT USER CONTEXT:\n"
+                            f"- User: {username} (Preferred Name: {display_name})\n"
+                            f"- YOUR ATTITUDE TOWARDS THIS USER: {attitude}\n"
+                            f"- Stored Memory Facts: {user_facts if user_facts else 'Wala pa'}\n\n"
+                            f"Instruction: Follow your specific attitude towards this user completely! If they curse or insult you, curse back aggressively. Keep it to 1-2 short sentences."
+                        )
+                    },
+                    {"role": "user", "content": content}
+                ],
+                max_tokens=100
+            )
+            reply_text = completion.choices[0].message.content
+        except Exception as e:
+            print(f"[Gemini Error]: {e}")
+            reply_text = "Tangina, nagloko linya ko sa Gemini!"
 
         if not reply_text:
-            reply_text = "Tangina, nagloko linya ko!"
+            reply_text = "Tangina, walang nasabi!"
 
         await message.channel.send(reply_text)
 
