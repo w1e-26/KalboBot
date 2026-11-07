@@ -62,7 +62,6 @@ SAFETY_SETTINGS = [
 conn = sqlite3.connect("kalbo_memory.db")
 cursor = conn.cursor()
 
-# Table para sa user memory (names/facts)
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS user_memory (
     user_id TEXT PRIMARY KEY,
@@ -72,7 +71,6 @@ CREATE TABLE IF NOT EXISTS user_memory (
 )
 """)
 
-# Table para sa dynamic attitudes
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS server_attitudes (
     user_id TEXT PRIMARY KEY,
@@ -80,7 +78,6 @@ CREATE TABLE IF NOT EXISTS server_attitudes (
 )
 """)
 
-# Table para sa bot-level admins
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS bot_admins (
     user_id TEXT PRIMARY KEY
@@ -139,7 +136,6 @@ def set_user_attitude(user_id: str, attitude: str):
     """, (user_id, attitude))
     conn.commit()
 
-# Helper function para i-check kung ang user ay admin (Discord Server Admin o Bot-Level Admin)
 def is_bot_admin(member: discord.Member):
     if member.guild_permissions.administrator:
         return True
@@ -188,7 +184,7 @@ bot = discord.Client(intents=intents)
 @bot.event
 async def on_ready():
     print(f"Kalbo is online as {bot.user}!")
-    print("Database-backed dynamic attitudes, admin management & live history loaded successfully.")
+    print("Database-backed dynamic attitudes, help command & live history loaded successfully.")
 
 @bot.event
 async def on_message(message):
@@ -199,30 +195,22 @@ async def on_message(message):
     content_lower = content_raw.lower()
 
     # -----------------------------------------------------------------------
-    # COMMAND: !kalbohelp
+    # COMMAND: !kalbohelp (Simple guide inside a dark code block)
     # -----------------------------------------------------------------------
     if content_lower == "!kalbohelp":
         help_text = (
-            "**🤖 Kalbo Bot - Command Center & Guide**\n\n"
-            "Here are the available commands and instructions on how to use them:\n\n"
-            "1. **`!kalbohelp`**\n"
-            "   - *Description:* Displays this help menu containing all commands and usage guidelines.\n\n"
-            "2. **`!kalboshop @user <custom prompt>`** *(Admin Only)*\n"
-            "   - *Description:* Sets or updates a custom personality/attitude for a specific user.\n"
-            "   - *Example:* `!kalboshop @username You treat this user like royalty.`\n\n"
-            "3. **`!kalboreset @user`** *(Admin Only)*\n"
-            "   - *Description:* Removes the custom attitude assigned to a user and reverts them back to default.\n\n"
-            "4. **`!kalbolist`**\n"
-            "   - *Description:* Lists all users with custom attitudes configured in the database.\n\n"
-            "5. **`!kalbomemories @user`** *(Admin Only)*\n"
-            "   - *Description:* Views the stored facts and preferred name of a specific user.\n\n"
-            "6. **`!kalboaddadmin @user`** *(Server Admin Only)*\n"
-            "   - *Description:* Grants bot-level admin privileges to a user so they can use admin commands.\n\n"
-            "7. **`!kalboremoveadmin @user`** *(Server Admin Only)*\n"
-            "   - *Description:* Revokes bot-level admin privileges from a user.\n\n"
-            "8. **Memory & Naming Commands** *(Mention the bot to use)*\n"
-            "   - **Remembering Facts:** Type `@Kalbo remember <your fact>` or include phrases like *'tandaan mo'*, *'paborito ko'*, or *'main ko'*.\n"
-            "   - **Setting a Name:** Tell the bot directly using *'tawagin mo akong <name>'*, *'call me <name>'*, or *'ako si <name>'*.\n\n"
+            "```yaml\n"
+            "Bot commands\n"
+            "!kalbolist      - View list of custom user attitudes\n"
+            "!kalboshop      - Set a custom attitude for a user (Admin)\n"
+            "!kalboreset     - Reset a user's attitude to default (Admin)\n"
+            "!kalbomemories  - View stored facts and name of a user (Admin)\n"
+            "!kalboaddadmin  - Add a bot-level admin (Server Admin)\n"
+            "!kalboremoveadmin - Remove a bot-level admin (Server Admin)\n\n"
+            "Memory guides\n"
+            "Mention bot + remember <fact>   - Save a fact about yourself\n"
+            "Mention bot + tawagin mo akong - Set your preferred name\n"
+            "```\n"
             "PANOT SI TOFU!"
         )
         await message.channel.send(help_text)
