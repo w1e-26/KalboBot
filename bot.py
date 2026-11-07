@@ -8,19 +8,21 @@ from google.genai import types
 from openai import OpenAI
 
 # ---------------------------------------------------------------------------
-# 1. API & TOKEN CONFIGURATION (Naka-link na sa Railway Environment Variables)
+# 1. API & TOKEN CONFIGURATION (Strictly Railway Environment Variables)
 # ---------------------------------------------------------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY") 
+
 if not DISCORD_TOKEN or not GEMINI_API_KEY:
-    print("[Error] Kulang ang Discord Token o Gemini API Key!")
+    print("[Error] Kulang ang Discord Token o Gemini API Key sa Railway Variables!")
 
 # Initialize Google GenAI client
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # Initialize Groq client as fallback backup
 groq_client = OpenAI(
-    api_key=GROQ_API_KEY if GROQ_API_KEY and not GROQ_API_KEY.startswith("LAGAY_MO") else "dummy_key",
+    api_key=GROQ_API_KEY if GROQ_API_KEY else "dummy_key",
     base_url="https://api.groq.com/openai/v1"
 )
 
@@ -117,7 +119,6 @@ USER_ATTITUDES = {
     "minaaaaaswd": "You treat this user like an ate! May respeto ka sa kanya, medyo pino kausap pero may halong lambing o takot paminsan-minsan dahil ate ang turing mo sa kanya.",
 }
 
-
 SYSTEM_PROMPT_BASE = """
 You are Kalbo (Joel Ravanera), a Filipino content creator from Cavite.
 
@@ -180,7 +181,6 @@ async def on_message(message):
         display_name = pref_name if pref_name else username
 
         user_key = username.lower()
-        # Default attitude kung wala sa listahan
         default_attitude = "Standard sarcastic kanto banter, energetic and funny. Fight back aggressively if insulted."
         attitude = USER_ATTITUDES.get(user_key, default_attitude)
 
@@ -223,7 +223,7 @@ async def on_message(message):
                     continue
 
             # 2. Kung nagka-issue ang Gemini, lumipat kay Groq bilang 3rd backup
-            if not reply_text and GROQ_API_KEY and not GROQ_API_KEY.startswith("LAGAY_MO"):
+            if not reply_text and GROQ_API_KEY:
                 try:
                     print("[Backup] Lumilipat kay Groq para sumagot...")
                     completion = await asyncio.to_thread(
