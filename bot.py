@@ -184,7 +184,7 @@ bot = discord.Client(intents=intents)
 @bot.event
 async def on_ready():
     print(f"Kalbo is online as {bot.user}!")
-    print("Database-backed dynamic attitudes, help command & live history loaded successfully.")
+    print("Database-backed dynamic attitudes, memory reset & live history loaded successfully.")
 
 @bot.event
 async def on_message(message):
@@ -201,11 +201,12 @@ async def on_message(message):
         help_text = (
             "```yaml\n"
             "Bot commands\n"
-            "!kalbolist      - View list of custom user attitudes\n"
-            "!kalboshop      - Set a custom attitude for a user (Admin)\n"
-            "!kalboreset     - Reset a user's attitude to default (Admin)\n"
-            "!kalbomemories  - View stored facts and name of a user (Admin)\n"
-            "!kalboaddadmin  - Add a bot-level admin (Server Admin)\n"
+            "!kalbolist        - View list of custom user attitudes\n"
+            "!kalboshop        - Set a custom attitude for a user (Admin)\n"
+            "!kalboreset       - Reset a user's attitude to default (Admin)\n"
+            "!kalbomemories    - View stored facts and name of a user (Admin)\n"
+            "!kalboresetmem    - Wipe out/reset a user's stored memory (Admin)\n"
+            "!kalboaddadmin    - Add a bot-level admin (Server Admin)\n"
             "!kalboremoveadmin - Remove a bot-level admin (Server Admin)\n\n"
             "Memory guides\n"
             "Mention bot + remember <fact>   - Save a fact about yourself\n"
@@ -272,6 +273,24 @@ async def on_message(message):
             await message.channel.send(memory_msg)
         else:
             await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalbomemories @user`")
+        return
+
+    # -----------------------------------------------------------------------
+    # ADMIN COMMAND: !kalboresetmem <@user> (Pambura ng user memory)
+    # -----------------------------------------------------------------------
+    if content_lower.startswith("!kalboresetmem"):
+        if not is_bot_admin(message.author):
+            await message.channel.send(f"Ulol, <@{message.author.id}>, bawal mong pakialaman ang memory ko para sa iba!")
+            return
+
+        match = re.search(r'!kalboresetmem\s+<@!?(\d+)>', content_raw)
+        if match:
+            target_user_id = match.group(1)
+            cursor.execute("DELETE FROM user_memory WHERE user_id = ?", (target_user_id,))
+            conn.commit()
+            await message.channel.send(f"Winiswit ko na ang utak ko, burado na lahat ng alaala at pangalan ni <@{target_user_id}>!")
+        else:
+            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboresetmem @user`")
         return
 
     # -----------------------------------------------------------------------
