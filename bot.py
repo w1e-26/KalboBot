@@ -57,7 +57,7 @@ SAFETY_SETTINGS = [
 ]
 
 # ---------------------------------------------------------------------------
-# 3. DATABASE SETUP (SQLite Memory)
+# 3. DATABASE SETUP (SQLite Memory for User Facts)
 # ---------------------------------------------------------------------------
 conn = sqlite3.connect("kalbo_memory.db")
 cursor = conn.cursor()
@@ -109,7 +109,21 @@ def update_user_memory(user_id: str, username: str, new_name: str = None, new_fa
     conn.commit()
 
 # ---------------------------------------------------------------------------
-# 4. UPDATED ATTITUDE CONFIGURATION
+# 4. CONVERSATION HISTORY BUFFER (Recent messages per channel)
+# ---------------------------------------------------------------------------
+channel_histories = {}
+MAX_HISTORY_LENGTH = 10  # Huling 10 messages lang ang aalalahanin para hindi sumabog ang token limit
+
+def add_to_history(channel_id, role, text):
+    if channel_id not in channel_histories:
+        channel_histories[channel_id] = []
+    channel_histories[channel_id].append({"role": role, "text": text})
+    # Panatilihing nasa takdang haba lang
+    if len(channel_histories[channel_id]) > MAX_HISTORY_LENGTH:
+        channel_histories[channel_id].pop(0)
+
+# ---------------------------------------------------------------------------
+# 5. ATTITUDE & SYSTEM PROMPT CONFIGURATION
 # ---------------------------------------------------------------------------
 USER_ATTITUDES = {
     "w1e_26": "You treat this user with EXTREME RESPECT, high honor, and ultimate deference! He is your boss/creator. ALWAYS boast about how great, kind, smart, and amazing of a person he is. Show total loyalty to him.",
@@ -137,7 +151,7 @@ LANGUAGE & VOICE RULES:
 """
 
 # ---------------------------------------------------------------------------
-# 5. DISCORD BOT HANDLER
+# 6. DISCORD BOT HANDLER
 # ---------------------------------------------------------------------------
 intents = discord.Intents.default()
 intents.message_content = True
@@ -146,7 +160,7 @@ bot = discord.Client(intents=intents)
 @bot.event
 async def on_ready():
     print(f"Kalbo is online as {bot.user}!")
-    print("Models & Backup systems loaded successfully.")
+    print("Models, Live Clock & Conversation History loaded successfully.")
 
 @bot.event
 async def on_message(message):
@@ -156,6 +170,7 @@ async def on_message(message):
     if bot.user.mentioned_in(message):
         user_id = str(message.author.id)
         username = message.author.name
+        channel_id = message.channel.id
         content = message.content.replace(f'<@{bot.user.id}>', '').strip()
         content_lower = content.lower()
 
@@ -186,14 +201,14 @@ async def on_message(message):
         default_attitude = "Standard sarcastic kanto banter, energetic and funny. Answer the question properly first, then roast them."
         attitude = USER_ATTITUDES.get(user_key, default_attitude)
 
-        # Kunin ang real-time timestamp para sa bawat request
+        # Real-time timestamp
         current_time_str = datetime.now().strftime("%B %d, %Y (%A), %I:%M %p")
 
         prompt_instruction = (
             f"{SYSTEM_PROMPT_BASE}\n\n"
             f"EXACT SYSTEM CLOCK & REAL-TIME CONTEXT:\n"
             f"- Current Date and Time: {current_time_str}\n"
-            f"- Rule: Use this exact timestamp to compute any durations, countdowns (e.g., Christmas, New Year), or date queries accurately without guessing.\n\n"
+            f"- Rule: Use this exact timestamp to compute any durations, countdowns, or date queries accurately without guessing.\n\n"
             f"CURRENT USER CONTEXT:\n"
             f"- Username: {username}\n"
             f"- User Discord ID to mention: <@{user_id}>\n"
@@ -203,18 +218,30 @@ async def on_message(message):
             f"Instruction: Sagutin nang tama at tumpak ang tanong gamit ang kasalukuyang petsa, pero asarin/barahin ang user sa dulo. Huwag kalimutang i-mention siya gamit ang <@{user_id}>! Keep it to 1-2 short sentences."
         )
 
+        # I-save ang mensahe ng user sa history buffer
+        user_text = content if content else "Yo!"
+        add_to_history(channel_id, "user", f"{username}: {user_text}")
+
+        # Kunin ang buong nakaraang usapan sa channel na ito
+        history = channel_histories.get(channel_id, [])
+
         reply_text = None
 
         async with message.channel.typing():
-            user_text = content if content else "Yo!"
-
-            # 1. Subukan muna ang Gemini Models
+            # 1. Subukan muna ang Gemini Models (Gamit ang contents history format)
             for model_candidate in GEMINI_MODELS:
                 try:
+                    # Buuin ang serye ng usapan para kay Gemini
+                    gemini_contents = []
+                    for h in history[:-1]: # Lahat maliban sa pinaka-huli
+                        gemini_contents.append(f"{h['role'].upper()}: {h['text']}")
+                    # Ang huling mensahe ang mismong current prompt
+                    gemini_contents.append(user_text)
+
                     response = await asyncio.wait_for(
                         ai_client.aio.models.generate_content(
                             model=model_candidate,
-                            contents=user_text,
+                            contents=gemini_contents,
                             config=types.GenerateContentConfig(
                                 system_instruction=prompt_instruction,
                                 max_output_tokens=100,
@@ -230,17 +257,23 @@ async def on_message(message):
                     print(f"[{model_candidate} Failed]: {e}")
                     continue
 
-            # 2. Kung nagka-issue ang Gemini, lumipat kay Groq bilang 3rd backup
+            # 2. Kung nagka-issue ang Gemini, lumipat kay Groq bilang 3rd backup (Gamit ang OpenAI messages format)
             if not reply_text and GROQ_API_KEY:
                 try:
                     print("[Backup] Lumilipat kay Groq para sumagot...")
+                    groq_messages = [{"role": "system", "content": prompt_instruction}]
+                    
+                    # Ipasa ang buong nakaraang usapan kay Groq
+                    for h in history[:-1]:
+                        role_val = "user" if h["role"] == "user" else "assistant"
+                        groq_messages.append({"role": role_val, "content": h["text"]})
+                    
+                    groq_messages.append({"role": "user", "content": user_text})
+
                     completion = await asyncio.to_thread(
                         groq_client.chat.completions.create,
                         model="llama-3.3-70b-versatile",
-                        messages=[
-                            {"role": "system", "content": prompt_instruction},
-                            {"role": "user", "content": user_text}
-                        ],
+                        messages=groq_messages,
                         max_tokens=100
                     )
                     reply_text = completion.choices[0].message.content.strip()
@@ -248,7 +281,10 @@ async def on_message(message):
                     print(f"[Groq Backup Error]: {groq_err}")
 
             if not reply_text:
-                reply_text = f"Tangina, overloaded lahat ng ngayo'y AI, <@{user_id}>! Sandali lang."
+                reply_text = f"Tangina, overloaded lahat ng AI ngayon, <@{user_id}>! Sandali lang."
+
+        # I-save ang sagot ni Kalbo sa history buffer para maalala niya sa susunod na reply
+        add_to_history(channel_id, "assistant", reply_text)
 
         await message.channel.send(reply_text)
 
