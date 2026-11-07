@@ -143,7 +143,52 @@ def is_bot_admin(member: discord.Member):
     return cursor.fetchone() is not None
 
 # ---------------------------------------------------------------------------
-# 4. CONVERSATION HISTORY BUFFER
+# 4. DISCORD UI DROPDOWN FOR MEMORY DELETION
+# ---------------------------------------------------------------------------
+class MemorySelect(discord.ui.Select):
+    def __init__(self, target_user_id: str, facts_list: list):
+        self.target_user_id = target_user_id
+        self.facts_list = facts_list
+        
+        # Gumawa ng options para sa dropdown (Max 25 options limit ang Discord)
+        options = []
+        for idx, fact in enumerate(facts_list[:25]):
+            # Putulin ang label kung masyadong mahaba (Max 100 chars allowed sa Discord label)
+            label = fact[:97] + "..." if len(fact) > 100 else fact
+            options.append(discord.SelectOption(label=label, value=str(idx)))
+            
+        super().__init__(placeholder="Piliin ang memory na gusto mong burahin...", min_values=1, max_values=1, options=options)
+
+    async def callback(self, interaction: discord.Interaction):
+        selected_index = int(self.values[0])
+        fact_to_remove = self.facts_list[selected_index]
+        
+        # Kunin ang kasalukuyang facts sa database
+        _, existing_facts = get_user_profile(self.target_user_id)
+        if existing_facts:
+            facts_array = [f.strip() for f in existing_facts.split("|")]
+            if fact_to_remove in facts_array:
+                facts_array.remove(fact_to_remove)
+            
+            new_facts_str = " | ".join(facts_array) if facts_array else None
+            
+            # I-update ang database
+            cursor.execute("""
+                UPDATE user_memory SET facts = ? WHERE user_id = ?
+            """, (new_facts_str, self.target_user_id))
+            conn.commit()
+            
+            await interaction.response.edit_message(content=f"🗑️ Binura ko na ang memory na 'to: *{fact_to_remove}*", view=None)
+        else:
+            await interaction.response.edit_message(content="Walang mahanap na memory para sa user na 'to.", view=None)
+
+class MemorySelectView(discord.ui.View):
+    def __init__(self, target_user_id: str, facts_list: list):
+        super().__init__(timeout=60)
+        self.add_item(MemorySelect(target_user_id, facts_list))
+
+# ---------------------------------------------------------------------------
+# 5. CONVERSATION HISTORY BUFFER
 # ---------------------------------------------------------------------------
 channel_histories = {}
 MAX_HISTORY_LENGTH = 10
@@ -156,7 +201,7 @@ def add_to_history(channel_id, role, text):
         channel_histories[channel_id].pop(0)
 
 # ---------------------------------------------------------------------------
-# 5. SYSTEM PROMPT CONFIGURATION
+# 6. SYSTEM PROMPT CONFIGURATION
 # ---------------------------------------------------------------------------
 SYSTEM_PROMPT_BASE = """
 You are Kalbo (Joel Ravanera), a Filipino content creator from Cavite.
@@ -175,7 +220,7 @@ LANGUAGE & VOICE RULES:
 """
 
 # ---------------------------------------------------------------------------
-# 6. DISCORD BOT HANDLER
+# 7. DISCORD BOT HANDLER
 # ---------------------------------------------------------------------------
 intents = discord.Intents.default()
 intents.message_content = True
@@ -184,7 +229,7 @@ bot = discord.Client(intents=intents)
 @bot.event
 async def on_ready():
     print(f"Kalbo is online as {bot.user}!")
-    print("Database-backed dynamic attitudes, memory reset & live history loaded successfully.")
+    print("Database-backed dynamic attitudes, interactive memory dropdown & live history loaded successfully.")
 
 @bot.event
 async def on_message(message):
@@ -201,13 +246,14 @@ async def on_message(message):
         help_text = (
             "```yaml\n"
             "Bot commands\n"
-            "!kalbolist        - View list of custom user attitudes\n"
-            "!kalboshop        - Set a custom attitude for a user (Admin)\n"
-            "!kalboreset       - Reset a user's attitude to default (Admin)\n"
-            "!kalbomemories    - View stored facts and name of a user (Admin)\n"
-            "!kalboresetmem    - Wipe out/reset a user's stored memory (Admin)\n"
-            "!kalboaddadmin    - Add a bot-level admin (Server Admin)\n"
-            "!kalboremoveadmin - Remove a bot-level admin (Server Admin)\n\n"
+            "!kalbolist          - View list of custom user attitudes\n"
+            "!kalboshop          - Set a custom attitude for a user (Admin)\n"
+            "!kalboreset         - Reset a user's attitude to default (Admin)\n"
+            "!kalbomemories      - View stored facts and name of a user (Admin)\n"
+            "!kalboresetmem      - Wipe out all stored memory of a user (Admin)\n"
+            "!kalbodeletemem     - Open a dropdown menu to delete a specific memory (Admin)\n"
+            "!kalboaddadmin      - Add a bot-level admin (Server Admin)\n"
+            "!kalboremoveadmin   - Remove a bot-level admin (Server Admin)\n\n"
             "Memory guides\n"
             "Mention bot + remember <fact>   - Save a fact about yourself\n"
             "Mention bot + tawagin mo akong - Set your preferred name\n"
@@ -276,7 +322,7 @@ async def on_message(message):
         return
 
     # -----------------------------------------------------------------------
-    # ADMIN COMMAND: !kalboresetmem <@user> (Pambura ng user memory)
+    # ADMIN COMMAND: !kalboresetmem <@user> (Wipe out all user memory)
     # -----------------------------------------------------------------------
     if content_lower.startswith("!kalboresetmem"):
         if not is_bot_admin(message.author):
@@ -291,6 +337,30 @@ async def on_message(message):
             await message.channel.send(f"Winiswit ko na ang utak ko, burado na lahat ng alaala at pangalan ni <@{target_user_id}>!")
         else:
             await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboresetmem @user`")
+        return
+
+    # -----------------------------------------------------------------------
+    # ADMIN COMMAND: !kalbodeletemem <@user> (Interactive Dropdown UI)
+    # -----------------------------------------------------------------------
+    if content_lower.startswith("!kalbodeletemem"):
+        if not is_bot_admin(message.author):
+            await message.channel.send(f"Ulol, <@{message.author.id}>, bawal mong pakialaman ang mga alaala ko!")
+            return
+
+        match = re.search(r'!kalbodeletemem\s+<@!?(\d+)>', content_raw)
+        if match:
+            target_user_id = match.group(1)
+            _, facts = get_user_profile(target_user_id)
+            
+            if not facts:
+                await message.channel.send(f"Wala namang nakasever o nakatagong memory kay <@{target_user_id}>, gago!")
+                return
+                
+            facts_list = [f.strip() for f in facts.split("|")]
+            view = MemorySelectView(target_user_id, facts_list)
+            await message.channel.send(f"Piliin sa ibaba kung aling memory ang gusto mong burahin kay <@{target_user_id}>:", view=view)
+        else:
+            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalbodeletemem @user`")
         return
 
     # -----------------------------------------------------------------------
