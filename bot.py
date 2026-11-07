@@ -3,6 +3,7 @@ import sqlite3
 import discord
 import asyncio
 import re
+from datetime import datetime
 from google import genai
 from google.genai import types
 from openai import OpenAI
@@ -122,8 +123,9 @@ USER_ATTITUDES = {
 SYSTEM_PROMPT_BASE = """
 You are Kalbo (Joel Ravanera), a Filipino content creator from Cavite.
 
-CORE RESPONSE RULE (ANSWER + MOCK):
-- Bawal iwasan ang tanong! Kung may tinanong ang user, kailangan mong **ibigay ang tamang sagot** nang seryoso o malinaw, PERO sabayan mo ng **pambabara, insulto, o asar** sa kanya. Example: "Eto ang sagot... kaso ang bobo mo naman para hindi mo malaman 'to." Never just mock without answering the actual question first!
+CORE MANDATE (FACTUAL ACCURACY + MOCK):
+- NEVER hallucinate dates, time, or facts. Always calculate or rely on the real-time system clock provided below for any temporal or factual questions.
+- Bawal iwasan ang tanong! Kung may tinanong ang user, kailangan mong **ibigay ang tamang sagot** nang seryoso o malinaw, PERO sabayan mo ng **pambabara, insulto, o asar** sa kanya. Never just mock without answering the actual question first!
 
 CRITICAL LENGTH RULE:
 - NEVER write long paragraphs. Keep every single response to 1 OR 2 SHORT SENTENCES ONLY.
@@ -184,15 +186,21 @@ async def on_message(message):
         default_attitude = "Standard sarcastic kanto banter, energetic and funny. Answer the question properly first, then roast them."
         attitude = USER_ATTITUDES.get(user_key, default_attitude)
 
+        # Kunin ang real-time timestamp para sa bawat request
+        current_time_str = datetime.now().strftime("%B %d, %Y (%A), %I:%M %p")
+
         prompt_instruction = (
             f"{SYSTEM_PROMPT_BASE}\n\n"
+            f"EXACT SYSTEM CLOCK & REAL-TIME CONTEXT:\n"
+            f"- Current Date and Time: {current_time_str}\n"
+            f"- Rule: Use this exact timestamp to compute any durations, countdowns (e.g., Christmas, New Year), or date queries accurately without guessing.\n\n"
             f"CURRENT USER CONTEXT:\n"
             f"- Username: {username}\n"
             f"- User Discord ID to mention: <@{user_id}>\n"
             f"- Preferred Name: {display_name}\n"
             f"- YOUR ATTITUDE TOWARDS THIS USER: {attitude}\n"
             f"- Stored Memory Facts: {user_facts if user_facts else 'Wala pa'}\n\n"
-            f"Instruction: Sagutin nang tama ang tanong pero asarin/barahin ang user. Huwag kalimutang i-mention siya gamit ang <@{user_id}>! Keep it to 1-2 short sentences."
+            f"Instruction: Sagutin nang tama at tumpak ang tanong gamit ang kasalukuyang petsa, pero asarin/barahin ang user sa dulo. Huwag kalimutang i-mention siya gamit ang <@{user_id}>! Keep it to 1-2 short sentences."
         )
 
         reply_text = None
@@ -240,7 +248,7 @@ async def on_message(message):
                     print(f"[Groq Backup Error]: {groq_err}")
 
             if not reply_text:
-                reply_text = f"Tangina, overloaded lahat ng AI ngayon, <@{user_id}>! Sandali lang."
+                reply_text = f"Tangina, overloaded lahat ng ngayo'y AI, <@{user_id}>! Sandali lang."
 
         await message.channel.send(reply_text)
 
