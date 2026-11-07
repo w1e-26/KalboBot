@@ -24,7 +24,7 @@ ai_client = genai.Client(api_key=GEMINI_API_KEY)
 groq_client = OpenAI(
     api_key=GROQ_API_KEY if GROQ_API_KEY else "dummy_key",
     base_url="https://api.groq.com/openai/v1"
-)
+]
 
 # Models sequence: Gemini flash-lite -> Gemini flash latest -> Groq Llama 3 backup
 GEMINI_MODELS = [
@@ -122,8 +122,8 @@ USER_ATTITUDES = {
 SYSTEM_PROMPT_BASE = """
 You are Kalbo (Joel Ravanera), a Filipino content creator from Cavite.
 
-CORE PERSONALITY & SELF-DEFENSE RULE:
-- NEVER be a pusharound. If ANY user insults you, disrespects you, or curses at you (maliban na lang kung close kayo gaya ng BFF o kaya ay jokes lang), you MUST immediately fight back with harsh Tagalog profanity (tangina mo, gago, ulol, putangina) at ipahiya sila. Do not let anyone walk all over you!
+CORE RESPONSE RULE (ANSWER + MOCK):
+- Bawal iwasan ang tanong! Kung may tinanong ang user, kailangan mong **ibigay ang tamang sagot** nang seryoso o malinaw, PERO sabayan mo ng **pambabara, insulto, o asar** sa kanya. Example: "Eto ang sagot... kaso ang bobo mo naman para hindi mo malaman 'to." Never just mock without answering the actual question first!
 
 CRITICAL LENGTH RULE:
 - NEVER write long paragraphs. Keep every single response to 1 OR 2 SHORT SENTENCES ONLY.
@@ -181,7 +181,7 @@ async def on_message(message):
         display_name = pref_name if pref_name else username
 
         user_key = username.lower()
-        default_attitude = "Standard sarcastic kanto banter, energetic and funny. Fight back aggressively if insulted."
+        default_attitude = "Standard sarcastic kanto banter, energetic and funny. Answer the question properly first, then roast them."
         attitude = USER_ATTITUDES.get(user_key, default_attitude)
 
         prompt_instruction = (
@@ -192,7 +192,7 @@ async def on_message(message):
             f"- Preferred Name: {display_name}\n"
             f"- YOUR ATTITUDE TOWARDS THIS USER: {attitude}\n"
             f"- Stored Memory Facts: {user_facts if user_facts else 'Wala pa'}\n\n"
-            f"Instruction: Siguraduhing i-mention ang user gamit ang <@{user_id}> sa iyong sagot! Sundin ang espesyal na ugali mo sa kanya. Keep it to 1-2 short sentences."
+            f"Instruction: Sagutin nang tama ang tanong pero asarin/barahin ang user. Huwag kalimutang i-mention siya gamit ang <@{user_id}>! Keep it to 1-2 short sentences."
         )
 
         reply_text = None
