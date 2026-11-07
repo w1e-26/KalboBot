@@ -123,7 +123,6 @@ def get_user_attitude(user_id: str):
     row = cursor.fetchone()
     if row:
         return row[0]
-    # Default attitude kung wala pang naseset na custom
     return "Standard sarcastic kanto banter, energetic and funny. Answer the question properly first, then roast them."
 
 def set_user_attitude(user_id: str, attitude: str):
@@ -176,7 +175,7 @@ bot = discord.Client(intents=intents)
 @bot.event
 async def on_ready():
     print(f"Kalbo is online as {bot.user}!")
-    print("Database-backed dynamic attitudes & live history loaded successfully.")
+    print("Database-backed dynamic attitudes, help command & live history loaded successfully.")
 
 @bot.event
 async def on_message(message):
@@ -187,15 +186,37 @@ async def on_message(message):
     content_lower = content_raw.lower()
 
     # -----------------------------------------------------------------------
+    # COMMAND: !help (English Instructions for all features & commands)
+    # -----------------------------------------------------------------------
+    if content_lower == "!help":
+        help_text = (
+            "**🤖 Kalbo Bot - Command Center & Guide**\n\n"
+            "Here are the available commands and instructions on how to use them:\n\n"
+            "1. **`!help`**\n"
+            "   - *Description:* Displays this help menu containing all commands and usage guidelines.\n\n"
+            "2. **`!setattitude @user <custom prompt>`** *(Admin Only)*\n"
+            "   - *Description:* Sets or updates a custom personality/attitude for a specific user. Kalbo will dynamically adjust how he roasts or treats that user.\n"
+            "   - *Example:* `!setattitude @username You treat this user like royalty and speak with extreme respect.`\n\n"
+            "3. **`!resetattitude @user`** *(Admin Only)*\n"
+            "   - *Description:* Removes the custom attitude assigned to a user and reverts them back to the default sarcastic roasting persona.\n"
+            "   - *Example:* `!resetattitude @username`\n\n"
+            "4. **`!attitudelist`** or **`!listattitude`**\n"
+            "   - *Description:* Lists all users who currently have custom attitudes configured in the database along with their assigned prompts.\n\n"
+            "5. **Memory & Naming Commands** *(Mention the bot to use)*\n"
+            "   - **Remembering Facts:** Type `@Kalbo remember <your fact>` or include phrases like *'tandaan mo'*, *'paborito ko'*, or *'main ko'* when mentioning the bot.\n"
+            "   - **Setting a Name:** Tell the bot directly in your message using phrases like *'tawagin mo akong <name>'*, *'call me <name>'*, or *'ako si <name>'*."
+        )
+        await message.channel.send(help_text)
+        return
+
+    # -----------------------------------------------------------------------
     # ADMIN COMMAND: !setattitude <@user> <bagong ugali>
     # -----------------------------------------------------------------------
     if content_lower.startswith("!setattitude"):
-        # Suriin kung ang gumagamit ay Administrator
         if not message.author.guild_permissions.administrator:
             await message.channel.send(f"Ulol, <@{message.author.id}>, hindi ka admin para galawin ang ugali ko!")
             return
 
-        # I-parse ang command gamit ang regex para makuha ang target user mention at ang bagong attitude text
         match = re.search(r'!setattitude\s+<@!?(\d+)>\s+(.+)', content_raw, re.DOTALL)
         if match:
             target_user_id = match.group(1)
@@ -205,6 +226,46 @@ async def on_message(message):
             await message.channel.send(f"Na-update ko na ang ugali ko kay <@{target_user_id}>, boss!")
         else:
             await message.channel.send("Mali ang format, gago! Gamitin mo: `!setattitude @user <ugali>`")
+        return
+
+    # -----------------------------------------------------------------------
+    # ADMIN COMMAND: !resetattitude <@user>
+    # -----------------------------------------------------------------------
+    if content_lower.startswith("!resetattitude"):
+        if not message.author.guild_permissions.administrator:
+            await message.channel.send(f"Ulol, <@{message.author.id}>, bawal ka mag-reset!")
+            return
+
+        match = re.search(r'!resetattitude\s+<@!?(\d+)>', content_raw)
+        if match:
+            target_user_id = match.group(1)
+            cursor.execute("DELETE FROM server_attitudes WHERE user_id = ?", (target_user_id,))
+            conn.commit()
+            await message.channel.send(f"Binura ko na ang special treatment kay <@{target_user_id}>, balik sa dati 'yan!")
+        else:
+            await message.channel.send("Mali ang format, gago! Gamitin mo: `!resetattitude @user`")
+        return
+
+    # -----------------------------------------------------------------------
+    # COMMAND: !attitudelist
+    # -----------------------------------------------------------------------
+    if content_lower.startswith("!attitudelist") or content_lower.startswith("!listattitude"):
+        cursor.execute("SELECT user_id, attitude FROM server_attitudes")
+        rows = cursor.fetchall()
+        
+        if not rows:
+            await message.channel.send("Wala pa akong naka-set na custom attitudes sa database, gago. Default kaming lahat!")
+            return
+        
+        response_msg = "**📋 Listahan ng mga Custom Attitudes ni Kalbo:**\n"
+        for row in rows:
+            u_id, att = row
+            response_msg += f"- <@{u_id}> (ID: `{u_id}`):\n  > *{att}*\n\n"
+        
+        if len(response_msg) > 2000:
+            response_msg = response_msg[:1990] + "\n...(putol na dahil sobrang haba)"
+            
+        await message.channel.send(response_msg)
         return
 
     # -----------------------------------------------------------------------
@@ -240,10 +301,7 @@ async def on_message(message):
         pref_name, user_facts = get_user_profile(user_id)
         display_name = pref_name if pref_name else username
 
-        # Kunin ang custom attitude ng user na ito mula sa SQLite database
         attitude = get_user_attitude(user_id)
-
-        # Real-time timestamp
         current_time_str = datetime.now().strftime("%B %d, %Y (%A), %I:%M %p")
 
         prompt_instruction = (
@@ -319,7 +377,4 @@ async def on_message(message):
             if not reply_text:
                 reply_text = f"Tangina, overloaded lahat ng AI ngayon, <@{user_id}>! Sandali lang."
 
-        add_to_history(channel_id, "assistant", reply_text)
-        await message.channel.send(reply_text)
-
-bot.run(DISCORD_TOKEN)
+        add_to_history(channel_id, "assistant", reply_text
