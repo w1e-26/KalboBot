@@ -57,7 +57,7 @@ SAFETY_SETTINGS = [
 ]
 
 # ---------------------------------------------------------------------------
-# 3. DATABASE SETUP (SQLite Memory & Dynamic Attitudes)
+# 3. DATABASE SETUP (SQLite Memory, Attitudes & Bot Admins)
 # ---------------------------------------------------------------------------
 conn = sqlite3.connect("kalbo_memory.db")
 cursor = conn.cursor()
@@ -72,11 +72,18 @@ CREATE TABLE IF NOT EXISTS user_memory (
 )
 """)
 
-# Table para sa dynamic attitudes na pwedeng i-configure via command
+# Table para sa dynamic attitudes
 cursor.execute("""
 CREATE TABLE IF NOT EXISTS server_attitudes (
     user_id TEXT PRIMARY KEY,
     attitude TEXT
+)
+""")
+
+# Table para sa bot-level admins
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS bot_admins (
+    user_id TEXT PRIMARY KEY
 )
 """)
 conn.commit()
@@ -117,7 +124,6 @@ def update_user_memory(user_id: str, username: str, new_name: str = None, new_fa
     """, (user_id, username, final_name, final_facts))
     conn.commit()
 
-# Functions para sa Dynamic Attitudes Database
 def get_user_attitude(user_id: str):
     cursor.execute("SELECT attitude FROM server_attitudes WHERE user_id = ?", (user_id,))
     row = cursor.fetchone()
@@ -132,6 +138,13 @@ def set_user_attitude(user_id: str, attitude: str):
         ON CONFLICT(user_id) DO UPDATE SET attitude = excluded.attitude
     """, (user_id, attitude))
     conn.commit()
+
+# Helper function para i-check kung ang user ay admin (Discord Server Admin o Bot-Level Admin)
+def is_bot_admin(member: discord.Member):
+    if member.guild_permissions.administrator:
+        return True
+    cursor.execute("SELECT 1 FROM bot_admins WHERE user_id = ?", (str(member.id),))
+    return cursor.fetchone() is not None
 
 # ---------------------------------------------------------------------------
 # 4. CONVERSATION HISTORY BUFFER
@@ -175,7 +188,7 @@ bot = discord.Client(intents=intents)
 @bot.event
 async def on_ready():
     print(f"Kalbo is online as {bot.user}!")
-    print("Database-backed dynamic attitudes, help command & live history loaded successfully.")
+    print("Database-backed dynamic attitudes, admin management & live history loaded successfully.")
 
 @bot.event
 async def on_message(message):
@@ -186,7 +199,7 @@ async def on_message(message):
     content_lower = content_raw.lower()
 
     # -----------------------------------------------------------------------
-    # COMMAND: !kalbohelp (English Instructions for all features & commands)
+    # COMMAND: !kalbohelp
     # -----------------------------------------------------------------------
     if content_lower == "!kalbohelp":
         help_text = (
@@ -195,16 +208,22 @@ async def on_message(message):
             "1. **`!kalbohelp`**\n"
             "   - *Description:* Displays this help menu containing all commands and usage guidelines.\n\n"
             "2. **`!kalboshop @user <custom prompt>`** *(Admin Only)*\n"
-            "   - *Description:* Sets or updates a custom personality/attitude for a specific user. Kalbo will dynamically adjust how he roasts or treats that user.\n"
-            "   - *Example:* `!kalboshop @username You treat this user like royalty and speak with extreme respect.`\n\n"
+            "   - *Description:* Sets or updates a custom personality/attitude for a specific user.\n"
+            "   - *Example:* `!kalboshop @username You treat this user like royalty.`\n\n"
             "3. **`!kalboreset @user`** *(Admin Only)*\n"
-            "   - *Description:* Removes the custom attitude assigned to a user and reverts them back to the default sarcastic roasting persona.\n"
-            "   - *Example:* `!kalboreset @username`\n\n"
+            "   - *Description:* Removes the custom attitude assigned to a user and reverts them back to default.\n\n"
             "4. **`!kalbolist`**\n"
-            "   - *Description:* Lists all users who currently have custom attitudes configured in the database along with their assigned prompts.\n\n"
-            "5. **Memory & Naming Commands** *(Mention the bot to use)*\n"
-            "   - **Remembering Facts:** Type `@Kalbo remember <your fact>` or include phrases like *'tandaan mo'*, *'paborito ko'*, or *'main ko'* when mentioning the bot.\n"
-            "   - **Setting a Name:** Tell the bot directly in your message using phrases like *'tawagin mo akong <name>'*, *'call me <name>'*, or *'ako si <name>'*."
+            "   - *Description:* Lists all users with custom attitudes configured in the database.\n\n"
+            "5. **`!kalbomemories @user`** *(Admin Only)*\n"
+            "   - *Description:* Views the stored facts and preferred name of a specific user.\n\n"
+            "6. **`!kalboaddadmin @user`** *(Server Admin Only)*\n"
+            "   - *Description:* Grants bot-level admin privileges to a user so they can use admin commands.\n\n"
+            "7. **`!kalboremoveadmin @user`** *(Server Admin Only)*\n"
+            "   - *Description:* Revokes bot-level admin privileges from a user.\n\n"
+            "8. **Memory & Naming Commands** *(Mention the bot to use)*\n"
+            "   - **Remembering Facts:** Type `@Kalbo remember <your fact>` or include phrases like *'tandaan mo'*, *'paborito ko'*, or *'main ko'*.\n"
+            "   - **Setting a Name:** Tell the bot directly using *'tawagin mo akong <name>'*, *'call me <name>'*, or *'ako si <name>'*.\n\n"
+            "PANOT SI TOFU!"
         )
         await message.channel.send(help_text)
         return
@@ -213,7 +232,7 @@ async def on_message(message):
     # ADMIN COMMAND: !kalboshop <@user> <bagong ugali>
     # -----------------------------------------------------------------------
     if content_lower.startswith("!kalboshop"):
-        if not message.author.guild_permissions.administrator:
+        if not is_bot_admin(message.author):
             await message.channel.send(f"Ulol, <@{message.author.id}>, hindi ka admin para galawin ang ugali ko!")
             return
 
@@ -232,7 +251,7 @@ async def on_message(message):
     # ADMIN COMMAND: !kalboreset <@user>
     # -----------------------------------------------------------------------
     if content_lower.startswith("!kalboreset"):
-        if not message.author.guild_permissions.administrator:
+        if not is_bot_admin(message.author):
             await message.channel.send(f"Ulol, <@{message.author.id}>, bawal ka mag-reset!")
             return
 
@@ -244,6 +263,63 @@ async def on_message(message):
             await message.channel.send(f"Binura ko na ang special treatment kay <@{target_user_id}>, balik sa dati 'yan!")
         else:
             await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboreset @user`")
+        return
+
+    # -----------------------------------------------------------------------
+    # ADMIN COMMAND: !kalbomemories <@user>
+    # -----------------------------------------------------------------------
+    if content_lower.startswith("!kalbomemories"):
+        if not is_bot_admin(message.author):
+            await message.channel.send(f"Ulol, <@{message.author.id}>, bawal mong silipin ang utak ko para sa iba!")
+            return
+
+        match = re.search(r'!kalbomemories\s+<@!?(\d+)>', content_raw)
+        if match:
+            target_user_id = match.group(1)
+            pref_name, facts = get_user_profile(target_user_id)
+            
+            memory_msg = f"**🧠 Stored Memories for <@{target_user_id}>:**\n"
+            memory_msg += f"- **Preferred Name:** {pref_name if pref_name else 'None set'}\n"
+            memory_msg += f"- **Saved Facts:** {facts if facts else 'No facts recorded yet.'}\n"
+            await message.channel.send(memory_msg)
+        else:
+            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalbomemories @user`")
+        return
+
+    # -----------------------------------------------------------------------
+    # SERVER ADMIN ONLY: !kalboaddadmin <@user>
+    # -----------------------------------------------------------------------
+    if content_lower.startswith("!kalboaddadmin"):
+        if not message.author.guild_permissions.administrator:
+            await message.channel.send(f"Gago ka ba, <@{message.author.id}>? Server Admin lang ang pwedeng magdagdag ng bot admin!")
+            return
+
+        match = re.search(r'!kalboaddadmin\s+<@!?(\d+)>', content_raw)
+        if match:
+            target_user_id = match.group(1)
+            cursor.execute("INSERT OR IGNORE INTO bot_admins (user_id) VALUES (?)", (target_user_id,))
+            conn.commit()
+            await message.channel.send(f"Nilista ko na si <@{target_user_id}> bilang Bot Admin, boss!")
+        else:
+            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboaddadmin @user`")
+        return
+
+    # -----------------------------------------------------------------------
+    # SERVER ADMIN ONLY: !kalboremoveadmin <@user>
+    # -----------------------------------------------------------------------
+    if content_lower.startswith("!kalboremoveadmin"):
+        if not message.author.guild_permissions.administrator:
+            await message.channel.send(f"Gago ka ba, <@{message.author.id}>? Server Admin lang ang pwedeng magtanggal ng bot admin!")
+            return
+
+        match = re.search(r'!kalboremoveadmin\s+<@!?(\d+)>', content_raw)
+        if match:
+            target_user_id = match.group(1)
+            cursor.execute("DELETE FROM bot_admins WHERE user_id = ?", (target_user_id,))
+            conn.commit()
+            await message.channel.send(f"Tinanggal ko na ang bot admin access ni <@{target_user_id}>!")
+        else:
+            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboremoveadmin @user`")
         return
 
     # -----------------------------------------------------------------------
