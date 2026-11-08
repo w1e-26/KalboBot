@@ -172,9 +172,12 @@ class DeleteListView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=120)
 
-    @discord.ui.button(label="Done", style=discord.ButtonStyle.danger, emoji="🗑️")
+    @discord.ui.button(label="Done", style=discord.ButtonStyle.danger)
     async def delete_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.message.delete()
+        await interaction.response.edit_message(
+            content=f"ℹ️ <@{interaction.user.id}> used `!kalbolist`", 
+            view=None
+        )
 
 channel_histories = {}
 MAX_HISTORY_LENGTH = 10
@@ -379,11 +382,9 @@ async def on_message(message):
         return
 
     if content_lower.startswith("!kalbolist"):
-        # Check if user wants 'all' or specific user ID search
         parts = content_raw.split()
         
         if len(parts) == 1:
-            # Ordinary user viewing their own custom attitude only
             user_id = str(message.author.id)
             cursor.execute("SELECT attitude FROM server_attitudes WHERE user_id = %s", (user_id,))
             row = cursor.fetchone()
@@ -394,7 +395,6 @@ async def on_message(message):
                 response_msg = f"Wala ka pang naka-set na custom attitude, <@{user_id}>. Default ang gamit ko sa'yo!"
         
         else:
-            # Requires admin for 'all' or searching specific user IDs
             if not is_bot_admin(message.author):
                 await message.channel.send(f"Ulol, <@{message.author.id}>, pampamilya/pampinuno lang ang `!kalbolist all` o paghahanap ng iba!")
                 return
@@ -417,7 +417,6 @@ async def on_message(message):
                 if len(response_msg) > 2000:
                     response_msg = response_msg[:1990] + "\n...(putol na dahil sobrang haba)"
             else:
-                # Search by ID or mention
                 search_match = re.search(r'(?:<@!?(\d+)>|(\d+))', parts[1])
                 if search_match:
                     search_id = search_match.group(1) or search_match.group(2)
