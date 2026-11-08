@@ -159,7 +159,7 @@ class MemorySelect(discord.ui.Select):
             """, (new_facts_str, self.target_user_id))
             conn.commit()
             
-            await interaction.response.edit_message(content=f"🗑️ Binura ko na ang memory na 'to: *{fact_to_remove}*", view=None)
+            await interaction.response.edit_message(content=f"Binura ko na ang memory na 'to: *{fact_to_remove}*", view=None)
         else:
             await interaction.response.edit_message(content="Walang mahanap na memory para sa user na 'to.", view=None)
 
@@ -175,7 +175,7 @@ class DeleteListView(discord.ui.View):
     @discord.ui.button(label="Done", style=discord.ButtonStyle.danger)
     async def delete_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(
-            content=f"ℹ️ <@{interaction.user.id}> used `!kalbolist`", 
+            content=f"<@{interaction.user.id}> used `!kalbolist`", 
             view=None
         )
 
@@ -304,7 +304,7 @@ async def on_message(message):
             target_user_id = str(message.author.id)
 
         pref_name, facts = get_user_profile(target_user_id)
-        memory_msg = f"**🧠 Stored Memories for <@{target_user_id}>:**\n"
+        memory_msg = f"**Stored Memories for <@{target_user_id}>:**\n"
         memory_msg += f"- **Preferred Name:** {pref_name if pref_name else 'None set'}\n"
         memory_msg += f"- **Saved Facts:** {facts if facts else 'No facts recorded yet.'}\n"
         await message.channel.send(memory_msg)
@@ -390,7 +390,7 @@ async def on_message(message):
             row = cursor.fetchone()
             
             if row:
-                response_msg = f"**📋 Ang Custom Attitude Mo:**\n- <@{user_id}>:\n  > *{row[0]}*"
+                response_msg = f"**Ang Custom Attitude Mo:**\n- <@{user_id}>:\n  > *{row[0]}*"
             else:
                 response_msg = f"Wala ka pang naka-set na custom attitude, <@{user_id}>. Default ang gamit ko sa'yo!"
         
@@ -409,7 +409,7 @@ async def on_message(message):
                     await message.channel.send("Wala pa akong naka-set na custom attitudes sa database, gago. Default kaming lahat!")
                     return
                 
-                response_msg = "**📋 Listahan ng lahat ng Custom Attitudes ni Kalbo:**\n"
+                response_msg = "**Listahan ng lahat ng Custom Attitudes ni Kalbo:**\n"
                 for row in rows:
                     u_id, att = row
                     response_msg += f"- <@{u_id}> (ID: `{u_id}`):\n  > *{att}*\n\n"
@@ -424,7 +424,7 @@ async def on_message(message):
                     row = cursor.fetchone()
                     if row:
                         u_id, att = row
-                        response_msg = f"**📋 Result para sa User ID `{u_id}`:**\n- <@{u_id}>:\n  > *{att}*"
+                        response_msg = f"**Result para sa User ID `{u_id}`:**\n- <@{u_id}>:\n  > *{att}*"
                     else:
                         response_msg = f"Wala akong nakitang custom attitude para sa user ID na `{search_id}`, gago."
                 else:
