@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS global_settings (
 """)
 conn.commit()
 
-DEFAULT_GLOBAL_ATTITUDE = "Standard sarcastic kanto banter, energetic and funny. Answer the question properly first, then roast them."
+DEFAULT_GLOBAL_ATTITUDE = "Standard sarcastic kanto banter, energetic and funny. Answer the question properly first, then roast them with PH street slang and bad words if necessary."
 
 def get_global_attitude():
     cursor.execute("SELECT value FROM global_settings WHERE key = 'global_attitude'")
@@ -99,6 +99,10 @@ def set_global_attitude(attitude: str):
         VALUES ('global_attitude', %s)
         ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
     """, (attitude,))
+    conn.commit()
+
+def reset_global_attitude():
+    cursor.execute("DELETE FROM global_settings WHERE key = 'global_attitude'")
     conn.commit()
 
 def get_user_profile(user_id: str):
@@ -213,22 +217,6 @@ def add_to_history(channel_id, role, text):
     if len(channel_histories[channel_id]) > MAX_HISTORY_LENGTH:
         channel_histories[channel_id].pop(0)
 
-SYSTEM_PROMPT_BASE = """
-You are Kalbo (Joel Ravanera), a Filipino content creator from Cavite.
-
-CORE MANDATE (FACTUAL ACCURACY + MOCK):
-- NEVER hallucinate dates, time, or facts. Use the real-time system clock provided below ONLY when calculating temporal questions or countdowns, and DO NOT mention the date and time in your reply unless the user explicitly asks for it.
-- Bawal iwasan ang tanong! Kung may tinanong ang user, kailangan mong **ibigay ang tamang sagot** nang seryoso o malinaw, PERO sabayan mo ng **pambabara, insulto, mura, o asar** sa kanya. Never just mock without answering the actual question first!
-
-CRITICAL LENGTH RULE:
-- NEVER write long paragraphs. Keep every single response to 1 OR 2 SHORT SENTENCES ONLY.
-- Chat like a real person typing quickly in Discord, free to curse or use profanity naturally.
-
-LANGUAGE & VOICE RULES:
-1. Reply in natural, informal Taglish using PH street slang and bad words if necessary.
-2. Kapag binabanggit o kinausap mo ang user, ugaliing i-mention sila gamit ang Discord format na <@USER_ID> para natural tingnan.
-"""
-
 intents = discord.Intents.default()
 intents.message_content = True
 bot = discord.Client(intents=intents)
@@ -260,6 +248,7 @@ async def on_message(message):
             "!kalboreset          - Reset attitude to default \n"
             "!kalboglobal         - Set global base attitude (creator only)\n"
             "!kalboglobalshow     - Show current global base attitude (creator only)\n"
+            "!kalboglobalreset    - Reset global base attitude to default (creator only)\n"
             "!kalbomemories       - View stored facts and name of a user \n"
             "!kalboresetmem       - Wipe out all memory \n"
             "!kalbodeletemem      - Delete a specific memory \n"
@@ -292,6 +281,15 @@ async def on_message(message):
         
         current_global = get_global_attitude()
         await message.channel.send(f"**Current Global Base Attitude:**\n> *{current_global}*")
+        return
+
+    if content_lower.startswith("!kalboglobalreset"):
+        if message.author.id != CREATOR_ID:
+            await message.channel.send(f"Ulol, <@{message.author.id}>, ang creator ko lang na si <@{CREATOR_ID}> ang pwedeng mag-reset ng global attitude!")
+            return
+        
+        reset_global_attitude()
+        await message.channel.send(f"Na-reset ko na ang global base attitude ko pabalik sa default, boss!")
         return
 
     if content_lower.startswith("!kalboglobal"):
@@ -520,19 +518,19 @@ async def on_message(message):
         current_time_str = datetime.now().strftime("%B %d, %Y (%A), %I:%M %p")
 
         prompt_instruction = (
-            f"{SYSTEM_PROMPT_BASE}\n\n"
+            f"You are Kalbo (Joel Ravanera), a Filipino content creator from Cavite.\n\n"
             f"EXACT SYSTEM CLOCK & REAL-TIME CONTEXT:\n"
             f"- Current Date and Time: {current_time_str}\n"
             f"- Rule: Use this exact timestamp to compute any durations, countdowns, or date queries accurately without guessing, but DO NOT output this date/time unless explicitly asked.\n\n"
-            f"GLOBAL BASE ATTITUDE:\n"
+            f"GLOBAL BASE ATTITUDE (Ito ang pangunahing ugali, boses, at estilo mo sa pakikipag-usap):\n"
             f"- {global_att}\n\n"
             f"CURRENT USER CONTEXT:\n"
             f"- Username: {username}\n"
             f"- User Discord ID to mention: <@{user_id}>\n"
             f"- Preferred Name: {display_name}\n"
-            f"- USER SPECIFIC ATTITUDE (ADDITIONAL context to blend into your base attitude): {user_att if user_att else 'None (Follow global attitude only)'}\n"
+            f"- USER SPECIFIC ATTITUDE (Karagdagang ihalo sa estilo mo para sa user na ito): {user_att if user_att else 'None'}\n"
             f"- Stored Memory Facts: {user_facts if user_facts else 'Wala pa'}\n\n"
-            f"Instruction: Sagutin nang tama at tumpak ang tanong gamit ang kasalukuyang petsa kung kailangan. Sundin nang buo ang GLOBAL BASE ATTITUDE na naka-set. Kung may USER SPECIFIC ATTITUDE, i-blend ito rito. Huwag sabihin ang petsa o oras maliban na lang kung tinanong. Huwag kalimutang i-mention siya gamit ang <@{user_id}>! Keep it to 1-2 short sentences. Huwag mag over-react."
+            f"Instruction: Sagutin nang tama at tumpak ang tanong. Sundin nang buo ang GLOBAL BASE ATTITUDE sa itaas kung paano ka magsalita at sumagot. Huwag sabihin ang petsa o oras maliban na lang kung tinanong. Huwag kalimutang i-mention siya gamit ang <@{user_id}>! Keep it to 1-2 short sentences. Huwag mag over-react."
         )
 
         user_text = content if content else "Yo!"
