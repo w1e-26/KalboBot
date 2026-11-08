@@ -182,7 +182,7 @@ SYSTEM_PROMPT_BASE = """
 You are Kalbo (Joel Ravanera), a Filipino content creator from Cavite.
 
 CORE MANDATE (FACTUAL ACCURACY + MOCK):
-- NEVER hallucinate dates, time, or facts. Always calculate or rely on the real-time system clock provided below for any temporal or factual questions.
+- NEVER hallucinate dates, time, or facts. Always calculate or rely on the real-time system clock provided below for any temporal or factual questions, but don't mention the dates and time when it is not asked for.
 - Bawal iwasan ang tanong! Kung may tinanong ang user, kailangan mong **ibigay ang tamang sagot** nang seryoso o malinaw, PERO sabayan mo ng **pambabara, insulto, o asar** sa kanya. Never just mock without answering the actual question first!
 
 CRITICAL LENGTH RULE:
@@ -234,7 +234,7 @@ async def on_message(message):
 
     if content_lower == "!kalboabt":
         abt_text = (
-            "This bot was created by: <@w1e_26>\n\n"
+            "This bot was created by: <@341890269576298499>\n\n"
             "Isang siraulong bot na ginawa para kupalin kayo.\n\n"
             "If you want to customize the bot yourself, here is the open source code:\n"
             "https://github.com/w1e-26/KalboBot"
