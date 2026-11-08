@@ -532,7 +532,7 @@ async def on_message(message):
             f"- Preferred Name: {display_name}\n"
             f"- USER SPECIFIC ATTITUDE (ADDITIONAL context to blend into your base attitude): {user_att if user_att else 'None (Follow global attitude only)'}\n"
             f"- Stored Memory Facts: {user_facts if user_facts else 'Wala pa'}\n\n"
-            f"Instruction: Sagutin nang tama at tumpak ang tanong gamit ang kasalukuyang petsa kung kailangan. Panatilihin ang iyong base global attitude (mura/roast/slang), PERO i-blend o ihalo mo rito ang specific attitude para sa user na ito kung meron. Huwag sabihin ang petsa o oras maliban na lang kung tinanong. Huwag kalimutang i-mention siya gamit ang <@{user_id}>! Keep it to 1-2 short sentences."
+            f"Instruction: Sagutin nang tama at tumpak ang tanong gamit ang kasalukuyang petsa kung kailangan. Sundin nang buo ang GLOBAL BASE ATTITUDE na naka-set. Kung may USER SPECIFIC ATTITUDE, i-blend ito rito. Huwag sabihin ang petsa o oras maliban na lang kung tinanong. Huwag kalimutang i-mention siya gamit ang <@{user_id}>! Keep it to 1-2 short sentences. Huwag mag over-react."
         )
 
         user_text = content if content else "Yo!"
