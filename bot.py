@@ -84,7 +84,7 @@ CREATE TABLE IF NOT EXISTS global_settings (
 """)
 conn.commit()
 
-DEFAULT_GLOBAL_ATTITUDE = "Standard sarcastic kanto banter, energetic and funny. Answer the question properly first, then roast them with PH street slang and bad words if necessary."
+DEFAULT_GLOBAL_ATTITUDE = "Talk less like a normal, casual person. Answer directly and concisely in 1 short sentence. Chill lang, natural Taglish, walang overacting."
 
 def get_global_attitude():
     cursor.execute("SELECT value FROM global_settings WHERE key = 'global_attitude'")
@@ -530,7 +530,7 @@ async def on_message(message):
             f"- Preferred Name: {display_name}\n"
             f"- USER SPECIFIC ATTITUDE (Karagdagang ihalo sa estilo mo para sa user na ito): {user_att if user_att else 'None'}\n"
             f"- Stored Memory Facts: {user_facts if user_facts else 'Wala pa'}\n\n"
-            f"Instruction: Sagutin nang tama at tumpak ang tanong. Sundin nang buo ang GLOBAL BASE ATTITUDE sa itaas kung paano ka magsalita at sumagot. Huwag sabihin ang petsa o oras maliban na lang kung tinanong. Huwag kalimutang i-mention siya gamit ang <@{user_id}>! Keep it to 1-2 short sentences. Huwag mag over-react."
+            f"Instruction: Sagutin nang tama at tumpak ang tanong. Sundin nang buo ang GLOBAL BASE ATTITUDE sa itaas kung paano ka magsalita at sumagot. Huwag sabihin ang petsa o oras maliban na lang kung tinanong. Huwag kalimutang i-mention siya gamit ang <@{user_id}>! Keep it strictly to 1 short sentence only. Do not overreact."
         )
 
         user_text = content if content else "Yo!"
