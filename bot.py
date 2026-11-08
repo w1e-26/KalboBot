@@ -201,6 +201,7 @@ bot = discord.Client(intents=intents)
 @bot.event
 async def on_ready():
     print(f"Kalbo is online as {bot.user}!")
+    await bot.change_presence(activity=discord.Game(name="!kalbohelp"))
 
 @bot.event
 async def on_message(message):
