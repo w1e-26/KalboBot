@@ -3,15 +3,11 @@ import sqlite3
 import discord
 import asyncio
 import re
-import random
 from datetime import datetime
 from google import genai
 from google.genai import types
 from openai import OpenAI
 
-# ---------------------------------------------------------------------------
-# 1. API & TOKEN CONFIGURATION (Strictly Railway Environment Variables)
-# ---------------------------------------------------------------------------
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY") 
@@ -19,25 +15,19 @@ GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 if not DISCORD_TOKEN or not GEMINI_API_KEY:
     print("[Error] Kulang ang Discord Token o Gemini API Key sa Railway Variables!")
 
-# Initialize Google GenAI client
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
-# Initialize Groq client as fallback backup
 groq_client = OpenAI(
     api_key=GROQ_API_KEY if GROQ_API_KEY else "dummy_key",
     base_url="https://api.groq.com/openai/v1"
 )
 
-# Models sequence: Gemini flash-lite -> Gemini flash latest -> Groq Llama 3 backup
 GEMINI_MODELS = [
     "gemini-3.1-flash-lite",
     "gemini-flash-latest",
     "gemini-3.5-flash-lite"
 ]
 
-# ---------------------------------------------------------------------------
-# 2. SAFETY SETTINGS (Gemini)
-# ---------------------------------------------------------------------------
 SAFETY_SETTINGS = [
     types.SafetySetting(
         category=types.HarmCategory.HARM_CATEGORY_HARASSMENT,
@@ -57,9 +47,6 @@ SAFETY_SETTINGS = [
     ),
 ]
 
-# ---------------------------------------------------------------------------
-# 3. DATABASE SETUP (SQLite Memory, Attitudes & Bot Admins)
-# ---------------------------------------------------------------------------
 conn = sqlite3.connect("kalbo_memory.db")
 cursor = conn.cursor()
 
@@ -143,9 +130,6 @@ def is_bot_admin(member: discord.Member):
     cursor.execute("SELECT 1 FROM bot_admins WHERE user_id = ?", (str(member.id),))
     return cursor.fetchone() is not None
 
-# ---------------------------------------------------------------------------
-# 4. DISCORD UI DROPDOWN FOR MEMORY DELETION
-# ---------------------------------------------------------------------------
 class MemorySelect(discord.ui.Select):
     def __init__(self, target_user_id: str, facts_list: list):
         self.target_user_id = target_user_id
@@ -184,9 +168,6 @@ class MemorySelectView(discord.ui.View):
         super().__init__(timeout=60)
         self.add_item(MemorySelect(target_user_id, facts_list))
 
-# ---------------------------------------------------------------------------
-# 5. CONVERSATION HISTORY BUFFER
-# ---------------------------------------------------------------------------
 channel_histories = {}
 MAX_HISTORY_LENGTH = 10
 
@@ -197,9 +178,6 @@ def add_to_history(channel_id, role, text):
     if len(channel_histories[channel_id]) > MAX_HISTORY_LENGTH:
         channel_histories[channel_id].pop(0)
 
-# ---------------------------------------------------------------------------
-# 6. SYSTEM PROMPT CONFIGURATION
-# ---------------------------------------------------------------------------
 SYSTEM_PROMPT_BASE = """
 You are Kalbo (Joel Ravanera), a Filipino content creator from Cavite.
 
@@ -216,9 +194,6 @@ LANGUAGE & VOICE RULES:
 2. Kapag binabanggit o kinausap mo ang user, ugaliing i-mention sila gamit ang Discord format na <@USER_ID> para natural tingnan.
 """
 
-# ---------------------------------------------------------------------------
-# 7. DISCORD BOT HANDLER
-# ---------------------------------------------------------------------------
 intents = discord.Intents.default()
 intents.message_content = True
 bot = discord.Client(intents=intents)
@@ -226,7 +201,6 @@ bot = discord.Client(intents=intents)
 @bot.event
 async def on_ready():
     print(f"Kalbo is online as {bot.user}!")
-    print("Database-backed dynamic attitudes, interactive memory dropdown & live history loaded successfully.")
 
 @bot.event
 async def on_message(message):
@@ -236,19 +210,16 @@ async def on_message(message):
     content_raw = message.content.strip()
     content_lower = content_raw.lower()
 
-    # -----------------------------------------------------------------------
-    # COMMAND: !kalbohelp
-    # -----------------------------------------------------------------------
     if content_lower == "!kalbohelp":
         help_text = (
             "```yaml\n"
             "Bot commands\n"
             "!kalbolist          - View list of custom user attitudes\n"
-            "!kalboshop          - Set a custom attitude for a user (Admin)\n"
-            "!kalboreset         - Reset a user's attitude to default (Admin)\n"
+            "!kalboshop          - Set custom attitude (@user for admin, or self)\n"
+            "!kalboreset         - Reset attitude to default (@user for admin, or self)\n"
             "!kalbomemories      - View stored facts and name of a user (Admin)\n"
-            "!kalboresetmem      - Wipe out all stored memory of a user (Admin)\n"
-            "!kalbodeletemem     - Open a dropdown menu to delete a specific memory (Admin)\n"
+            "!kalboresetmem      - Wipe out all memory (@user for admin, or self)\n"
+            "!kalbodeletemem     - Delete a specific memory (@user for admin, or self)\n"
             "!kalboaddadmin      - Add a bot-level admin (Server Admin)\n"
             "!kalboremoveadmin   - Remove a bot-level admin (Server Admin)\n"
             "!kalboabt           - Learn more about the bot\n\n"
@@ -261,72 +232,52 @@ async def on_message(message):
         await message.channel.send(help_text)
         return
 
-    # -----------------------------------------------------------------------
-    # COMMAND: !kalboabt (Blue colored text in dark box + random dog/cat gif)
-    # -----------------------------------------------------------------------
     if content_lower == "!kalboabt":
-        # Listahan ng mga cute dog/cat GIFs
-        gifs = [
-            "https://media.giphy.com/media/3oKIPnAiaMCws8nOsE/giphy.gif",
-            "https://media.giphy.com/media/13CoX4dCDrjW7C/giphy.gif",
-            "https://media.giphy.com/media/5vkW42G6K1b1K/giphy.gif",
-            "https://media.giphy.com/media/MDJ9IbxxvDUQM/giphy.gif",
-            "https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif",
-            "https://media.giphy.com/media/icoZ4E9F7628zZ/giphy.gif"
-        ]
-        random_gif = random.choice(gifs)
-
-        # ANSI blue coloring inside the code block
         abt_text = (
             "```ansi\n"
-            "\u001b[34mThis bot was created by: w1e_26\n\n"
-            "Isang siraulong bot na ginawa para kupalin kayo.\u001b[0m\n"
-            "```\n"
-            f"{random_gif}"
+            "\u001b[0mThis bot was created by: <@w1e_26>\n\n"
+            "Isang siraulong bot na ginawa para kupalin kayo.\n\n"
+            "If you want to customize the bot yourself, here is the open source code:\n"
+            "[https://github.com/w1e-26/KalboBot](https://github.com/w1e-26/KalboBot)\u001b[0m\n"
+            "```"
         )
         await message.channel.send(abt_text)
         return
 
-    # -----------------------------------------------------------------------
-    # ADMIN COMMAND: !kalboshop <@user> <bagong ugali>
-    # -----------------------------------------------------------------------
     if content_lower.startswith("!kalboshop"):
-        if not is_bot_admin(message.author):
-            await message.channel.send(f"Ulol, <@{message.author.id}>, hindi ka admin para galawin ang ugali ko!")
-            return
-
-        match = re.search(r'!kalboshop\s+<@!?(\d+)>\s+(.+)', content_raw, re.DOTALL)
+        match = re.search(r'!kalboshop\s+(?:<@!?(\d+)>)?\s*(.+)', content_raw, re.DOTALL)
         if match:
             target_user_id = match.group(1)
             new_attitude = match.group(2).strip()
+            
+            if target_user_id:
+                if not is_bot_admin(message.author):
+                    await message.channel.send(f"Ulol, <@{message.author.id}>, hindi ka admin para galawin ang ugali ng iba!")
+                    return
+            else:
+                target_user_id = str(message.author.id)
 
             set_user_attitude(target_user_id, new_attitude)
             await message.channel.send(f"Na-update ko na ang ugali ko kay <@{target_user_id}>, boss!")
         else:
-            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboshop @user <ugali>`")
+            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboshop @user <ugali>` o `!kalboshop <ugali>` para sa sarili mo")
         return
 
-    # -----------------------------------------------------------------------
-    # ADMIN COMMAND: !kalboreset <@user>
-    # -----------------------------------------------------------------------
     if content_lower.startswith("!kalboreset"):
-        if not is_bot_admin(message.author):
-            await message.channel.send(f"Ulol, <@{message.author.id}>, bawal ka mag-reset!")
-            return
-
         match = re.search(r'!kalboreset\s+<@!?(\d+)>', content_raw)
         if match:
             target_user_id = match.group(1)
-            cursor.execute("DELETE FROM server_attitudes WHERE user_id = ?", (target_user_id,))
-            conn.commit()
-            await message.channel.send(f"Binura ko na ang special treatment kay <@{target_user_id}>, balik sa dati 'yan!")
+            if not is_bot_admin(message.author):
+                await message.channel.send(f"Ulol, <@{message.author.id}>, bawal mong i-reset ang iba!")
+                return
         else:
-            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboreset @user`")
+            target_user_id = str(message.author.id)
+
+        cursor.execute("DELETE FROM server_attitudes WHERE user_id = ?", (target_user_id,))
+        conn.commit()
+        await message.channel.send(f"Binura ko na ang special treatment kay <@{target_user_id}>, balik sa dati 'yan!")
         return
 
-    # -----------------------------------------------------------------------
-    # ADMIN COMMAND: !kalbomemories <@user>
-    # -----------------------------------------------------------------------
     if content_lower.startswith("!kalbomemories"):
         if not is_bot_admin(message.author):
             await message.channel.send(f"Ulol, <@{message.author.id}>, bawal mong silipin ang utak ko para sa iba!")
@@ -345,51 +296,41 @@ async def on_message(message):
             await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalbomemories @user`")
         return
 
-    # -----------------------------------------------------------------------
-    # ADMIN COMMAND: !kalboresetmem <@user>
-    # -----------------------------------------------------------------------
     if content_lower.startswith("!kalboresetmem"):
-        if not is_bot_admin(message.author):
-            await message.channel.send(f"Ulol, <@{message.author.id}>, bawal mong pakialaman ang memory ko para sa iba!")
-            return
-
         match = re.search(r'!kalboresetmem\s+<@!?(\d+)>', content_raw)
         if match:
             target_user_id = match.group(1)
-            cursor.execute("DELETE FROM user_memory WHERE user_id = ?", (target_user_id,))
-            conn.commit()
-            await message.channel.send(f"Winiswit ko na ang utak ko, burado na lahat ng alaala at pangalan ni <@{target_user_id}>!")
+            if not is_bot_admin(message.author):
+                await message.channel.send(f"Ulol, <@{message.author.id}>, bawal mong pakialaman ang memory ng iba!")
+                return
         else:
-            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboresetmem @user`")
+            target_user_id = str(message.author.id)
+
+        cursor.execute("DELETE FROM user_memory WHERE user_id = ?", (target_user_id,))
+        conn.commit()
+        await message.channel.send(f"Winiswit ko na ang utak ko, burado na lahat ng alaala at pangalan ni <@{target_user_id}>!")
         return
 
-    # -----------------------------------------------------------------------
-    # ADMIN COMMAND: !kalbodeletemem <@user>
-    # -----------------------------------------------------------------------
     if content_lower.startswith("!kalbodeletemem"):
-        if not is_bot_admin(message.author):
-            await message.channel.send(f"Ulol, <@{message.author.id}>, bawal mong pakialaman ang mga alaala ko!")
-            return
-
         match = re.search(r'!kalbodeletemem\s+<@!?(\d+)>', content_raw)
         if match:
             target_user_id = match.group(1)
-            _, facts = get_user_profile(target_user_id)
-            
-            if not facts:
-                await message.channel.send(f"Wala namang naka-save o nakatagong memory kay <@{target_user_id}>, gago!")
+            if not is_bot_admin(message.author):
+                await message.channel.send(f"Ulol, <@{message.author.id}>, bawal mong pakialaman ang mga alaala ng iba!")
                 return
-                
-            facts_list = [f.strip() for f in facts.split("|")]
-            view = MemorySelectView(target_user_id, facts_list)
-            await message.channel.send(f"Piliin sa ibaba kung aling memory ang gusto mong burahin kay <@{target_user_id}>:", view=view)
         else:
-            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalbodeletemem @user`")
+            target_user_id = str(message.author.id)
+
+        _, facts = get_user_profile(target_user_id)
+        if not facts:
+            await message.channel.send(f"Wala namang naka-save o nakatagong memory kay <@{target_user_id}>, gago!")
+            return
+            
+        facts_list = [f.strip() for f in facts.split("|")]
+        view = MemorySelectView(target_user_id, facts_list)
+        await message.channel.send(f"Piliin sa ibaba kung aling memory ang gusto mong burahin kay <@{target_user_id}>:", view=view)
         return
 
-    # -----------------------------------------------------------------------
-    # SERVER ADMIN ONLY: !kalboaddadmin <@user>
-    # -----------------------------------------------------------------------
     if content_lower.startswith("!kalboaddadmin"):
         if not message.author.guild_permissions.administrator:
             await message.channel.send(f"Gago ka ba, <@{message.author.id}>? Server Admin lang ang pwedeng magdagdag ng bot admin!")
@@ -405,9 +346,6 @@ async def on_message(message):
             await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboaddadmin @user`")
         return
 
-    # -----------------------------------------------------------------------
-    # SERVER ADMIN ONLY: !kalboremoveadmin <@user>
-    # -----------------------------------------------------------------------
     if content_lower.startswith("!kalboremoveadmin"):
         if not message.author.guild_permissions.administrator:
             await message.channel.send(f"Gago ka ba, <@{message.author.id}>? Server Admin lang ang pwedeng magtanggal ng bot admin!")
@@ -423,9 +361,6 @@ async def on_message(message):
             await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboremoveadmin @user`")
         return
 
-    # -----------------------------------------------------------------------
-    # COMMAND: !kalbolist
-    # -----------------------------------------------------------------------
     if content_lower.startswith("!kalbolist"):
         cursor.execute("SELECT user_id, attitude FROM server_attitudes")
         rows = cursor.fetchall()
@@ -445,9 +380,6 @@ async def on_message(message):
         await message.channel.send(response_msg)
         return
 
-    # -----------------------------------------------------------------------
-    # NORMAL MENTION & CHAT HANDLER
-    # -----------------------------------------------------------------------
     if bot.user.mentioned_in(message):
         user_id = str(message.author.id)
         username = message.author.name
@@ -455,7 +387,6 @@ async def on_message(message):
         content = content_raw.replace(f'<@{bot.user.id}>', '').strip()
         content_lower = content.lower()
 
-        # Name & Fact Extraction
         extracted_name = None
         name_match = re.search(r'(?:tawagin mo akong|call me|ako si|name ko ay|ako ay si)\s+([a-zA-Z0-9_\s]+)', content_lower)
         if name_match:
@@ -502,7 +433,6 @@ async def on_message(message):
         reply_text = None
 
         async with message.channel.typing():
-            # 1. Gemini Models
             for model_candidate in GEMINI_MODELS:
                 try:
                     gemini_contents = []
@@ -529,7 +459,6 @@ async def on_message(message):
                     print(f"[{model_candidate} Failed]: {e}")
                     continue
 
-            # 2. Groq Backup
             if not reply_text and GROQ_API_KEY:
                 try:
                     print("[Backup] Lumilipat kay Groq para sumagot...")
