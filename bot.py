@@ -1,8 +1,8 @@
 import os
-import sqlite3
 import discord
 import asyncio
 import re
+import psycopg2
 from datetime import datetime
 from google import genai
 from google.genai import types
@@ -10,10 +10,11 @@ from openai import OpenAI
 
 DISCORD_TOKEN = os.getenv("DISCORD_TOKEN")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GROQ_API_KEY = os.getenv("GROQ_API_KEY") 
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-if not DISCORD_TOKEN or not GEMINI_API_KEY:
-    print("[Error] Kulang ang Discord Token o Gemini API Key sa Railway Variables!")
+if not DISCORD_TOKEN or not GEMINI_API_KEY or not DATABASE_URL:
+    print("[Error] Kulang ang Discord Token, Gemini API Key, o DATABASE_URL sa Railway Variables!")
 
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
@@ -47,7 +48,8 @@ SAFETY_SETTINGS = [
     ),
 ]
 
-conn = sqlite3.connect("kalbo_memory.db")
+# Database Connection to Supabase (PostgreSQL)
+conn = psycopg2.connect(DATABASE_URL, sslmode='require')
 cursor = conn.cursor()
 
 cursor.execute("""
@@ -73,14 +75,8 @@ CREATE TABLE IF NOT EXISTS bot_admins (
 """)
 conn.commit()
 
-cursor.execute("PRAGMA table_info(user_memory)")
-columns = [column[1] for column in cursor.fetchall()]
-if "preferred_name" not in columns:
-    cursor.execute("ALTER TABLE user_memory ADD COLUMN preferred_name TEXT")
-    conn.commit()
-
 def get_user_profile(user_id: str):
-    cursor.execute("SELECT preferred_name, facts FROM user_memory WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT preferred_name, facts FROM user_memory WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     if row:
         return row[0], row[1]
@@ -102,15 +98,15 @@ def update_user_memory(user_id: str, username: str, new_name: str = None, new_fa
 
     cursor.execute("""
         INSERT INTO user_memory (user_id, username, preferred_name, facts) 
-        VALUES (?, ?, ?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET 
-            preferred_name=COALESCE(excluded.preferred_name, user_memory.preferred_name),
-            facts=COALESCE(excluded.facts, user_memory.facts)
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (user_id) DO UPDATE SET 
+            preferred_name = COALESCE(EXCLUDED.preferred_name, user_memory.preferred_name),
+            facts = COALESCE(EXCLUDED.facts, user_memory.facts)
     """, (user_id, username, final_name, final_facts))
     conn.commit()
 
 def get_user_attitude(user_id: str):
-    cursor.execute("SELECT attitude FROM server_attitudes WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT attitude FROM server_attitudes WHERE user_id = %s", (user_id,))
     row = cursor.fetchone()
     if row:
         return row[0]
@@ -119,15 +115,15 @@ def get_user_attitude(user_id: str):
 def set_user_attitude(user_id: str, attitude: str):
     cursor.execute("""
         INSERT INTO server_attitudes (user_id, attitude) 
-        VALUES (?, ?)
-        ON CONFLICT(user_id) DO UPDATE SET attitude = excluded.attitude
+        VALUES (%s, %s)
+        ON CONFLICT (user_id) DO UPDATE SET attitude = EXCLUDED.attitude
     """, (user_id, attitude))
     conn.commit()
 
 def is_bot_admin(member: discord.Member):
     if member.guild_permissions.administrator:
         return True
-    cursor.execute("SELECT 1 FROM bot_admins WHERE user_id = ?", (str(member.id),))
+    cursor.execute("SELECT 1 FROM bot_admins WHERE user_id = %s", (str(member.id),))
     return cursor.fetchone() is not None
 
 class MemorySelect(discord.ui.Select):
@@ -155,7 +151,7 @@ class MemorySelect(discord.ui.Select):
             new_facts_str = " | ".join(facts_array) if facts_array else None
             
             cursor.execute("""
-                UPDATE user_memory SET facts = ? WHERE user_id = ?
+                UPDATE user_memory SET facts = %s WHERE user_id = %s
             """, (new_facts_str, self.target_user_id))
             conn.commit()
             
@@ -272,7 +268,7 @@ async def on_message(message):
         else:
             target_user_id = str(message.author.id)
 
-        cursor.execute("DELETE FROM server_attitudes WHERE user_id = ?", (target_user_id,))
+        cursor.execute("DELETE FROM server_attitudes WHERE user_id = %s", (target_user_id,))
         conn.commit()
         await message.channel.send(f"Binura ko na ang special treatment kay <@{target_user_id}>, balik sa dati 'yan!")
         return
@@ -304,7 +300,7 @@ async def on_message(message):
         else:
             target_user_id = str(message.author.id)
 
-        cursor.execute("DELETE FROM user_memory WHERE user_id = ?", (target_user_id,))
+        cursor.execute("DELETE FROM user_memory WHERE user_id = %s", (target_user_id,))
         conn.commit()
         await message.channel.send(f"Winiswit ko na ang utak ko, burado na lahat ng alaala at pangalan ni <@{target_user_id}>!")
         return
@@ -337,7 +333,7 @@ async def on_message(message):
         match = re.search(r'!kalboaddadmin\s+<@!?(\d+)>', content_raw)
         if match:
             target_user_id = match.group(1)
-            cursor.execute("INSERT OR IGNORE INTO bot_admins (user_id) VALUES (?)", (target_user_id,))
+            cursor.execute("INSERT INTO bot_admins (user_id) VALUES (%s) ON CONFLICT DO NOTHING", (target_user_id,))
             conn.commit()
             await message.channel.send(f"Nilista ko na si <@{target_user_id}> bilang Bot Admin, boss!")
         else:
@@ -352,7 +348,7 @@ async def on_message(message):
         match = re.search(r'!kalboremoveadmin\s+<@!?(\d+)>', content_raw)
         if match:
             target_user_id = match.group(1)
-            cursor.execute("DELETE FROM bot_admins WHERE user_id = ?", (target_user_id,))
+            cursor.execute("DELETE FROM bot_admins WHERE user_id = %s", (target_user_id,))
             conn.commit()
             await message.channel.send(f"Tinanggal ko na ang bot admin access ni <@{target_user_id}>!")
         else:
@@ -379,6 +375,9 @@ async def on_message(message):
         return
 
     if bot.user.mentioned_in(message):
+        if message.mention_everyone:
+            return
+
         user_id = str(message.author.id)
         username = message.author.name
         channel_id = message.channel.id
