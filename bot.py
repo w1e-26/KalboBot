@@ -215,7 +215,7 @@ async def on_message(message):
             "```yaml\n"
             "Bot commands\n"
             "!kalbolist          - View list of custom user attitudes\n"
-            "!kalboshop          - Set custom attitude \n"
+            "!kalbogali          - Set custom attitude \n"
             "!kalboreset         - Reset attitude to default \n"
             "!kalbomemories      - View stored facts and name of a user \n"
             "!kalboresetmem      - Wipe out all memory \n"
@@ -244,8 +244,8 @@ async def on_message(message):
         await message.channel.send(abt_text)
         return
 
-    if content_lower.startswith("!kalboshop"):
-        match = re.search(r'!kalboshop\s+(?:<@!?(\d+)>)?\s*(.+)', content_raw, re.DOTALL)
+    if content_lower.startswith("!kalbogali"):
+        match = re.search(r'!kalbogali\s+(?:<@!?(\d+)>)?\s*(.+)', content_raw, re.DOTALL)
         if match:
             target_user_id = match.group(1)
             new_attitude = match.group(2).strip()
@@ -260,7 +260,7 @@ async def on_message(message):
             set_user_attitude(target_user_id, new_attitude)
             await message.channel.send(f"Na-update ko na ang ugali ko kay <@{target_user_id}>, boss!")
         else:
-            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboshop @user <ugali>` o `!kalboshop <ugali>`")
+            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalbogali @user <ugali>` o `!kalbogali <ugali>`")
         return
 
     if content_lower.startswith("!kalboreset"):
