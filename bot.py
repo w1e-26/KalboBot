@@ -234,12 +234,10 @@ async def on_message(message):
 
     if content_lower == "!kalboabt":
         abt_text = (
-            "```ansi\n"
-            "\u001b[0mThis bot was created by: <@w1e_26>\n\n"
+            "This bot was created by: <@w1e_26>\n\n"
             "Isang siraulong bot na ginawa para kupalin kayo.\n\n"
             "If you want to customize the bot yourself, here is the open source code:\n"
-            "\u001b[34m[https://github.com/w1e-26/KalboBot](https://github.com/w1e-26/KalboBot)\u001b[0m\n"
-            "```"
+            "https://github.com/w1e-26/KalboBot"
         )
         await message.channel.send(abt_text)
         return
