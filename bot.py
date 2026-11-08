@@ -75,7 +75,31 @@ CREATE TABLE IF NOT EXISTS bot_admins (
     user_id TEXT PRIMARY KEY
 )
 """)
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS global_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+)
+""")
 conn.commit()
+
+DEFAULT_GLOBAL_ATTITUDE = "Standard sarcastic kanto banter, energetic and funny. Answer the question properly first, then roast them."
+
+def get_global_attitude():
+    cursor.execute("SELECT value FROM global_settings WHERE key = 'global_attitude'")
+    row = cursor.fetchone()
+    if row and row[0]:
+        return row[0]
+    return DEFAULT_GLOBAL_ATTITUDE
+
+def set_global_attitude(attitude: str):
+    cursor.execute("""
+        INSERT INTO global_settings (key, value)
+        VALUES ('global_attitude', %s)
+        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
+    """, (attitude,))
+    conn.commit()
 
 def get_user_profile(user_id: str):
     cursor.execute("SELECT preferred_name, facts FROM user_memory WHERE user_id = %s", (user_id,))
@@ -112,7 +136,7 @@ def get_user_attitude(user_id: str):
     row = cursor.fetchone()
     if row:
         return row[0]
-    return "Standard sarcastic kanto banter, energetic and funny. Answer the question properly first, then roast them."
+    return None
 
 def set_user_attitude(user_id: str, attitude: str):
     cursor.execute("""
@@ -234,6 +258,8 @@ async def on_message(message):
             "!kalbolist [user_id] - View specific user attitude (admin only)\n"
             "!kalbogali           - Set custom attitude \n"
             "!kalboreset          - Reset attitude to default \n"
+            "!kalboglobal         - Set global base attitude (creator only)\n"
+            "!kalboglobalshow     - Show current global base attitude (creator only)\n"
             "!kalbomemories       - View stored facts and name of a user \n"
             "!kalboresetmem       - Wipe out all memory \n"
             "!kalbodeletemem      - Delete a specific memory \n"
@@ -257,6 +283,29 @@ async def on_message(message):
             "https://github.com/w1e-26/KalboBot"
         )
         await message.channel.send(abt_text)
+        return
+
+    if content_lower.startswith("!kalboglobalshow"):
+        if message.author.id != CREATOR_ID:
+            await message.channel.send(f"Ulol, <@{message.author.id}>, ang creator ko lang na si <@{CREATOR_ID}> ang pwedeng makakita ng global attitude!")
+            return
+        
+        current_global = get_global_attitude()
+        await message.channel.send(f"**Current Global Base Attitude:**\n> *{current_global}*")
+        return
+
+    if content_lower.startswith("!kalboglobal"):
+        if message.author.id != CREATOR_ID:
+            await message.channel.send(f"Ulol, <@{message.author.id}>, ang creator ko lang na si <@{CREATOR_ID}> ang pwedeng magpalit ng global attitude!")
+            return
+
+        match = re.search(r'!kalboglobal\s+(.+)', content_raw, re.DOTALL)
+        if match:
+            new_global = match.group(1).strip()
+            set_global_attitude(new_global)
+            await message.channel.send(f"Na-update ko na ang global base attitude ko, boss!")
+        else:
+            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboglobal <bagong global attitude>`")
         return
 
     if content_lower.startswith("!kalbogali"):
@@ -386,11 +435,10 @@ async def on_message(message):
         
         if len(parts) == 1:
             user_id = str(message.author.id)
-            cursor.execute("SELECT attitude FROM server_attitudes WHERE user_id = %s", (user_id,))
-            row = cursor.fetchone()
+            user_att = get_user_attitude(user_id)
             
-            if row:
-                response_msg = f"**Ang Custom Attitude Mo:**\n- <@{user_id}>:\n  > *{row[0]}*"
+            if user_att:
+                response_msg = f"**Ang Custom Attitude Mo:**\n- <@{user_id}>:\n  > *{user_att}*"
             else:
                 response_msg = f"Wala ka pang naka-set na custom attitude, <@{user_id}>. Default ang gamit ko sa'yo!"
         
@@ -466,7 +514,9 @@ async def on_message(message):
         pref_name, user_facts = get_user_profile(user_id)
         display_name = pref_name if pref_name else username
 
-        attitude = get_user_attitude(user_id)
+        global_att = get_global_attitude()
+        user_att = get_user_attitude(user_id)
+        
         current_time_str = datetime.now().strftime("%B %d, %Y (%A), %I:%M %p")
 
         prompt_instruction = (
@@ -474,13 +524,15 @@ async def on_message(message):
             f"EXACT SYSTEM CLOCK & REAL-TIME CONTEXT:\n"
             f"- Current Date and Time: {current_time_str}\n"
             f"- Rule: Use this exact timestamp to compute any durations, countdowns, or date queries accurately without guessing, but DO NOT output this date/time unless explicitly asked.\n\n"
+            f"GLOBAL BASE ATTITUDE:\n"
+            f"- {global_att}\n\n"
             f"CURRENT USER CONTEXT:\n"
             f"- Username: {username}\n"
             f"- User Discord ID to mention: <@{user_id}>\n"
             f"- Preferred Name: {display_name}\n"
-            f"- YOUR ATTITUDE TOWARDS THIS USER: {attitude}\n"
+            f"- USER SPECIFIC ATTITUDE (ADDITIONAL context to blend into your base attitude): {user_att if user_att else 'None (Follow global attitude only)'}\n"
             f"- Stored Memory Facts: {user_facts if user_facts else 'Wala pa'}\n\n"
-            f"Instruction: Sagutin nang tama at tumpak ang tanong gamit ang kasalukuyang petsa kung kailangan, pero asarin/barahin/mura ang user ayon sa iyong attitude sa kanya. Huwag sabihin ang petsa o oras maliban na lang kung tinanong. Huwag kalimutang i-mention siya gamit ang <@{user_id}>! Keep it to 1-2 short sentences."
+            f"Instruction: Sagutin nang tama at tumpak ang tanong gamit ang kasalukuyang petsa kung kailangan. Panatilihin ang iyong base global attitude (mura/roast/slang), PERO i-blend o ihalo mo rito ang specific attitude para sa user na ito kung meron. Huwag sabihin ang petsa o oras maliban na lang kung tinanong. Huwag kalimutang i-mention siya gamit ang <@{user_id}>! Keep it to 1-2 short sentences."
         )
 
         user_text = content if content else "Yo!"
