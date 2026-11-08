@@ -226,7 +226,9 @@ async def on_message(message):
         help_text = (
             "```yaml\n"
             "Bot commands\n"
-            "!kalbolist [user_id]   - View list of custom attitudes (admin only)\n"
+            "!kalbolist           - View your own custom attitude\n"
+            "!kalbolist all       - View list of all custom attitudes (admin only)\n"
+            "!kalbolist [user_id] - View specific user attitude (admin only)\n"
             "!kalbogali           - Set custom attitude \n"
             "!kalboreset          - Reset attitude to default \n"
             "!kalbomemories       - View stored facts and name of a user \n"
@@ -377,38 +379,58 @@ async def on_message(message):
         return
 
     if content_lower.startswith("!kalbolist"):
-        if not is_bot_admin(message.author):
-            await message.channel.send(f"Ulol, <@{message.author.id}>, pampamilya/pampinuno lang ang command na 'to! Hindi ka admin.")
-            return
-
-        # Pwedeng mag-search gamit ang user ID o mention: !kalbolist 341890269576298499 o !kalbolist @user
-        search_match = re.search(r'!kalbolist\s+(?:<@!?(\d+)>|(\d+))', content_raw)
+        # Check if user wants 'all' or specific user ID search
+        parts = content_raw.split()
         
-        if search_match:
-            search_id = search_match.group(1) or search_match.group(2)
-            cursor.execute("SELECT user_id, attitude FROM server_attitudes WHERE user_id = %s", (search_id,))
+        if len(parts) == 1:
+            # Ordinary user viewing their own custom attitude only
+            user_id = str(message.author.id)
+            cursor.execute("SELECT attitude FROM server_attitudes WHERE user_id = %s", (user_id,))
             row = cursor.fetchone()
+            
             if row:
-                u_id, att = row
-                response_msg = f"**📋 Result para sa User ID `{u_id}`:**\n- <@{u_id}>:\n  > *{att}*"
+                response_msg = f"**📋 Ang Custom Attitude Mo:**\n- <@{user_id}>:\n  > *{row[0]}*"
             else:
-                response_msg = f"Wala akong nakitang custom attitude para sa user ID na `{search_id}`, gago."
+                response_msg = f"Wala ka pang naka-set na custom attitude, <@{user_id}>. Default ang gamit ko sa'yo!"
+        
         else:
-            cursor.execute("SELECT user_id, attitude FROM server_attitudes")
-            rows = cursor.fetchall()
-            
-            if not rows:
-                await message.channel.send("Wala pa akong naka-set na custom attitudes sa database, gago. Default kaming lahat!")
+            # Requires admin for 'all' or searching specific user IDs
+            if not is_bot_admin(message.author):
+                await message.channel.send(f"Ulol, <@{message.author.id}>, pampamilya/pampinuno lang ang `!kalbolist all` o paghahanap ng iba!")
                 return
+
+            sub_arg = parts[1].lower()
             
-            response_msg = "**📋 Listahan ng mga Custom Attitudes ni Kalbo:**\n"
-            for row in rows:
-                u_id, att = row
-                response_msg += f"- <@{u_id}> (ID: `{u_id}`):\n  > *{att}*\n\n"
-            
-            if len(response_msg) > 2000:
-                response_msg = response_msg[:1990] + "\n...(putol na dahil sobrang haba)"
-            
+            if sub_arg == "all":
+                cursor.execute("SELECT user_id, attitude FROM server_attitudes")
+                rows = cursor.fetchall()
+                
+                if not rows:
+                    await message.channel.send("Wala pa akong naka-set na custom attitudes sa database, gago. Default kaming lahat!")
+                    return
+                
+                response_msg = "**📋 Listahan ng lahat ng Custom Attitudes ni Kalbo:**\n"
+                for row in rows:
+                    u_id, att = row
+                    response_msg += f"- <@{u_id}> (ID: `{u_id}`):\n  > *{att}*\n\n"
+                
+                if len(response_msg) > 2000:
+                    response_msg = response_msg[:1990] + "\n...(putol na dahil sobrang haba)"
+            else:
+                # Search by ID or mention
+                search_match = re.search(r'(?:<@!?(\d+)>|(\d+))', parts[1])
+                if search_match:
+                    search_id = search_match.group(1) or search_match.group(2)
+                    cursor.execute("SELECT user_id, attitude FROM server_attitudes WHERE user_id = %s", (search_id,))
+                    row = cursor.fetchone()
+                    if row:
+                        u_id, att = row
+                        response_msg = f"**📋 Result para sa User ID `{u_id}`:**\n- <@{u_id}>:\n  > *{att}*"
+                    else:
+                        response_msg = f"Wala akong nakitang custom attitude para sa user ID na `{search_id}`, gago."
+                else:
+                    response_msg = "Mali ang format ng paghahanap, gago! Gamitin ang `!kalbolist all` o `!kalbolist @user`."
+
         view = DeleteListView()
         await message.channel.send(response_msg, view=view)
         return
