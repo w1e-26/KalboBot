@@ -318,7 +318,7 @@ async def on_message(message):
         else:
             target_user_id = str(message.author.id)
 
-        _, facts = get_user_profile(target_user_id)
+        pref_name, facts = get_user_profile(target_user_id)
         if not facts:
             await message.channel.send(f"Wala namang naka-save o nakatagong memory kay <@{target_user_id}>, gago!")
             return
