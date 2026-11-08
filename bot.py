@@ -215,11 +215,11 @@ async def on_message(message):
             "```yaml\n"
             "Bot commands\n"
             "!kalbolist          - View list of custom user attitudes\n"
-            "!kalboshop          - Set custom attitude (@user for admin, or self)\n"
-            "!kalboreset         - Reset attitude to default (@user for admin, or self)\n"
-            "!kalbomemories      - View stored facts and name of a user (Admin)\n"
-            "!kalboresetmem      - Wipe out all memory (@user for admin, or self)\n"
-            "!kalbodeletemem     - Delete a specific memory (@user for admin, or self)\n"
+            "!kalboshop          - Set custom attitude \n"
+            "!kalboreset         - Reset attitude to default \n"
+            "!kalbomemories      - View stored facts and name of a user \n"
+            "!kalboresetmem      - Wipe out all memory \n"
+            "!kalbodeletemem     - Delete a specific memory \n"
             "!kalboaddadmin      - Add a bot-level admin (Server Admin)\n"
             "!kalboremoveadmin   - Remove a bot-level admin (Server Admin)\n"
             "!kalboabt           - Learn more about the bot\n\n"
@@ -238,7 +238,7 @@ async def on_message(message):
             "\u001b[0mThis bot was created by: <@w1e_26>\n\n"
             "Isang siraulong bot na ginawa para kupalin kayo.\n\n"
             "If you want to customize the bot yourself, here is the open source code:\n"
-            "[https://github.com/w1e-26/KalboBot](https://github.com/w1e-26/KalboBot)\u001b[0m\n"
+            "\u001b[34m[https://github.com/w1e-26/KalboBot](https://github.com/w1e-26/KalboBot)\u001b[0m\n"
             "```"
         )
         await message.channel.send(abt_text)
@@ -260,7 +260,7 @@ async def on_message(message):
             set_user_attitude(target_user_id, new_attitude)
             await message.channel.send(f"Na-update ko na ang ugali ko kay <@{target_user_id}>, boss!")
         else:
-            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboshop @user <ugali>` o `!kalboshop <ugali>` para sa sarili mo")
+            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalboshop @user <ugali>` o `!kalboshop <ugali>`")
         return
 
     if content_lower.startswith("!kalboreset"):
@@ -279,21 +279,20 @@ async def on_message(message):
         return
 
     if content_lower.startswith("!kalbomemories"):
-        if not is_bot_admin(message.author):
-            await message.channel.send(f"Ulol, <@{message.author.id}>, bawal mong silipin ang utak ko para sa iba!")
-            return
-
         match = re.search(r'!kalbomemories\s+<@!?(\d+)>', content_raw)
         if match:
             target_user_id = match.group(1)
-            pref_name, facts = get_user_profile(target_user_id)
-            
-            memory_msg = f"**🧠 Stored Memories for <@{target_user_id}>:**\n"
-            memory_msg += f"- **Preferred Name:** {pref_name if pref_name else 'None set'}\n"
-            memory_msg += f"- **Saved Facts:** {facts if facts else 'No facts recorded yet.'}\n"
-            await message.channel.send(memory_msg)
+            if not is_bot_admin(message.author):
+                await message.channel.send(f"Ulol, <@{message.author.id}>, bawal mong silipin ang utak ng iba!")
+                return
         else:
-            await message.channel.send("Mali ang format, gago! Gamitin mo: `!kalbomemories @user`")
+            target_user_id = str(message.author.id)
+
+        pref_name, facts = get_user_profile(target_user_id)
+        memory_msg = f"**🧠 Stored Memories for <@{target_user_id}>:**\n"
+        memory_msg += f"- **Preferred Name:** {pref_name if pref_name else 'None set'}\n"
+        memory_msg += f"- **Saved Facts:** {facts if facts else 'No facts recorded yet.'}\n"
+        await message.channel.send(memory_msg)
         return
 
     if content_lower.startswith("!kalboresetmem"):
