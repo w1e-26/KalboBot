@@ -172,7 +172,7 @@ class DeleteListView(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=120)
 
-    @discord.ui.button(label="Done (Burahin)", style=discord.ButtonStyle.danger, emoji="🗑️")
+    @discord.ui.button(label="Done", style=discord.ButtonStyle.danger, emoji="🗑️")
     async def delete_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.message.delete()
 
