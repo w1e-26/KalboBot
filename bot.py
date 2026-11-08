@@ -168,7 +168,7 @@ class MemorySelect(discord.ui.Select):
             label = fact[:97] + "..." if len(fact) > 100 else fact
             options.append(discord.SelectOption(label=label, value=str(idx)))
             
-        super().__init__(placeholder="Piliin ang memory na gusto mong burahin...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="piliin ang memory na gusto mong burahin...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         selected_index = int(self.values[0])
@@ -557,4 +557,46 @@ async def on_message(message):
                         ai_client.aio.models.generate_content(
                             model=model_candidate,
                             contents=gemini_contents,
-                            config=types.Generate
+                            config=types.GenerateContentConfig(
+                                system_instruction=prompt_instruction,
+                                max_output_tokens=100,
+                                safety_settings=SAFETY_SETTINGS
+                            )
+                        ),
+                        timeout=8.0
+                    )
+                    if response and response.text:
+                        reply_text = response.text.strip().lower()
+                        break
+                except Exception as e:
+                    print(f"[{model_candidate} Failed]: {e}")
+                    continue
+
+            if not reply_text and GROQ_API_KEY:
+                try:
+                    print("[Backup] Lumilipat kay Groq para sumagot...")
+                    groq_messages = [{"role": "system", "content": prompt_instruction}]
+                    
+                    for h in history[:-1]:
+                        role_val = "user" if h["role"] == "user" else "assistant"
+                        groq_messages.append({"role": role_val, "content": h["text"]})
+                    
+                    groq_messages.append({"role": "user", "content": user_text})
+
+                    completion = await asyncio.to_thread(
+                        groq_client.chat.completions.create,
+                        model="llama-3.3-70b-versatile",
+                        messages=groq_messages,
+                        max_tokens=100
+                    )
+                    reply_text = completion.choices[0].message.content.strip().lower()
+                except Exception as groq_err:
+                    print(f"[Groq Backup Error]: {groq_err}")
+
+            if not reply_text:
+                reply_text = f"tangina, overloaded lahat ng ai ngayon, <@{user_id}>! sandali lang."
+
+        add_to_history(channel_id, "assistant", reply_text)
+        await message.channel.send(reply_text)
+
+bot.run(DISCORD_TOKEN)
