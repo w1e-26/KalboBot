@@ -13,6 +13,8 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
+CREATOR_ID = 341890269576298499
+
 if not DISCORD_TOKEN or not GEMINI_API_KEY or not DATABASE_URL:
     print("[Error] Kulang ang Discord Token, Gemini API Key, o DATABASE_URL sa Railway Variables!")
 
@@ -121,6 +123,8 @@ def set_user_attitude(user_id: str, attitude: str):
     conn.commit()
 
 def is_bot_admin(member: discord.Member):
+    if member.id == CREATOR_ID:
+        return True
     if member.guild_permissions.administrator:
         return True
     cursor.execute("SELECT 1 FROM bot_admins WHERE user_id = %s", (str(member.id),))
@@ -164,6 +168,14 @@ class MemorySelectView(discord.ui.View):
         super().__init__(timeout=60)
         self.add_item(MemorySelect(target_user_id, facts_list))
 
+class DeleteListView(discord.ui.View):
+    def __init__(self):
+        super().__init__(timeout=120)
+
+    @discord.ui.button(label="Done (Burahin)", style=discord.ButtonStyle.danger, emoji="🗑️")
+    async def delete_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.message.delete()
+
 channel_histories = {}
 MAX_HISTORY_LENGTH = 10
 
@@ -204,6 +216,9 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
+    if message.mention_everyone:
+        return
+
     content_raw = message.content.strip()
     content_lower = content_raw.lower()
 
@@ -211,15 +226,15 @@ async def on_message(message):
         help_text = (
             "```yaml\n"
             "Bot commands\n"
-            "!kalbolist          - View list of custom user attitudes\n"
-            "!kalbogali          - Set custom attitude \n"
-            "!kalboreset         - Reset attitude to default \n"
-            "!kalbomemories      - View stored facts and name of a user \n"
-            "!kalboresetmem      - Wipe out all memory \n"
-            "!kalbodeletemem     - Delete a specific memory \n"
-            "!kalboaddadmin      - Add a bot-level admin (Server Admin)\n"
-            "!kalboremoveadmin   - Remove a bot-level admin (Server Admin)\n"
-            "!kalboabt           - Learn more about the bot\n\n"
+            "!kalbolist [user_id]   - View list of custom attitudes (admin only)\n"
+            "!kalbogali           - Set custom attitude \n"
+            "!kalboreset          - Reset attitude to default \n"
+            "!kalbomemories       - View stored facts and name of a user \n"
+            "!kalboresetmem       - Wipe out all memory \n"
+            "!kalbodeletemem      - Delete a specific memory \n"
+            "!kalboaddadmin       - Add a bot-level admin (Server Admin)\n"
+            "!kalboremoveadmin    - Remove a bot-level admin (Server Admin)\n"
+            "!kalboabt            - Learn more about the bot\n\n"
             "Memory guides\n"
             "Mention bot + remember <fact>   - Save a fact about yourself\n"
             "Mention bot + tawagin mo akong - Set your preferred name\n\n"
@@ -231,7 +246,7 @@ async def on_message(message):
 
     if content_lower == "!kalboabt":
         abt_text = (
-            "This bot was created by: <@341890269576298499>\n\n"
+            f"This bot was created by: <@{CREATOR_ID}>\n\n"
             "Isang siraulong bot na ginawa para kupalin kayo.\n\n"
             "If you want to customize the bot yourself, here is the open source code:\n"
             "https://github.com/w1e-26/KalboBot"
@@ -326,7 +341,7 @@ async def on_message(message):
         return
 
     if content_lower.startswith("!kalboaddadmin"):
-        if not message.author.guild_permissions.administrator:
+        if not message.author.guild_permissions.administrator and message.author.id != CREATOR_ID:
             await message.channel.send(f"Gago ka ba, <@{message.author.id}>? Server Admin lang ang pwedeng magdagdag ng bot admin!")
             return
 
@@ -341,11 +356,17 @@ async def on_message(message):
         return
 
     if content_lower.startswith("!kalboremoveadmin"):
-        if not message.author.guild_permissions.administrator:
+        match = re.search(r'!kalboremoveadmin\s+<@!?(\d+)>', content_raw)
+        if match:
+            target_user_id = match.group(1)
+            if int(target_user_id) == CREATOR_ID:
+                await message.channel.send(f"Ulol, <@{message.author.id}>! Hinding-hindi mo pwedeng tanggalin ang creator ko bilang admin!")
+                return
+        
+        if not message.author.guild_permissions.administrator and message.author.id != CREATOR_ID:
             await message.channel.send(f"Gago ka ba, <@{message.author.id}>? Server Admin lang ang pwedeng magtanggal ng bot admin!")
             return
 
-        match = re.search(r'!kalboremoveadmin\s+<@!?(\d+)>', content_raw)
         if match:
             target_user_id = match.group(1)
             cursor.execute("DELETE FROM bot_admins WHERE user_id = %s", (target_user_id,))
@@ -356,22 +377,40 @@ async def on_message(message):
         return
 
     if content_lower.startswith("!kalbolist"):
-        cursor.execute("SELECT user_id, attitude FROM server_attitudes")
-        rows = cursor.fetchall()
-        
-        if not rows:
-            await message.channel.send("Wala pa akong naka-set na custom attitudes sa database, gago. Default kaming lahat!")
+        if not is_bot_admin(message.author):
+            await message.channel.send(f"Ulol, <@{message.author.id}>, pampamilya/pampinuno lang ang command na 'to! Hindi ka admin.")
             return
+
+        # Pwedeng mag-search gamit ang user ID o mention: !kalbolist 341890269576298499 o !kalbolist @user
+        search_match = re.search(r'!kalbolist\s+(?:<@!?(\d+)>|(\d+))', content_raw)
         
-        response_msg = "**📋 Listahan ng mga Custom Attitudes ni Kalbo:**\n"
-        for row in rows:
-            u_id, att = row
-            response_msg += f"- <@{u_id}> (ID: `{u_id}`):\n  > *{att}*\n\n"
-        
-        if len(response_msg) > 2000:
-            response_msg = response_msg[:1990] + "\n...(putol na dahil sobrang haba)"
+        if search_match:
+            search_id = search_match.group(1) or search_match.group(2)
+            cursor.execute("SELECT user_id, attitude FROM server_attitudes WHERE user_id = %s", (search_id,))
+            row = cursor.fetchone()
+            if row:
+                u_id, att = row
+                response_msg = f"**📋 Result para sa User ID `{u_id}`:**\n- <@{u_id}>:\n  > *{att}*"
+            else:
+                response_msg = f"Wala akong nakitang custom attitude para sa user ID na `{search_id}`, gago."
+        else:
+            cursor.execute("SELECT user_id, attitude FROM server_attitudes")
+            rows = cursor.fetchall()
             
-        await message.channel.send(response_msg)
+            if not rows:
+                await message.channel.send("Wala pa akong naka-set na custom attitudes sa database, gago. Default kaming lahat!")
+                return
+            
+            response_msg = "**📋 Listahan ng mga Custom Attitudes ni Kalbo:**\n"
+            for row in rows:
+                u_id, att = row
+                response_msg += f"- <@{u_id}> (ID: `{u_id}`):\n  > *{att}*\n\n"
+            
+            if len(response_msg) > 2000:
+                response_msg = response_msg[:1990] + "\n...(putol na dahil sobrang haba)"
+            
+        view = DeleteListView()
+        await message.channel.send(response_msg, view=view)
         return
 
     if bot.user.mentioned_in(message):
