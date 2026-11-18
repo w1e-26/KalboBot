@@ -536,6 +536,7 @@ async def on_message(message):
             f"3. HUWAG na HUWAG mong pagsasabayin ang Preferred Name at ang <@USER_ID> sa isang sagot.\n\n"
             f"FORMATTING RULE:\n"
             f"- ALL LETTERS MUST BE IN LOWERCASE ONLY. No capital letters at all, no formal typing, type like a regular person chatting casually in a discord channel.\n\n"
+            f"- Whenever you mention numbers, dates, or days of the week, they MUST be strictly in English.\n\n"
             f"Instruction: Sagutin nang tama at tumpak ang tanong. Sundin nang buo ang GLOBAL BASE ATTITUDE sa itaas. Huwag sabihin ang petsa o oras maliban na lang kung tinanong. Keep it strictly to 1-2 short sentences maximum. Huwag mag overreact pero panatilihing kupal at may mura."
         )
 
