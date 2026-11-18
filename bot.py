@@ -355,8 +355,8 @@ async def on_message(message):
         memory_msg += f"- **saved facts:** {facts if facts else 'no facts recorded yet.'}\n"
         
         try:
-            target_user_obj = await bot.fetch_user(int(target_user_id))
-            await target_user_obj.send(memory_msg)
+            sender_obj = await bot.fetch_user(message.author.id)
+            await sender_obj.send(memory_msg)
             await message.channel.send(f"check dms! <@{message.author.id}>")
         except Exception as e:
             print(f"[DM Error]: {e}")
