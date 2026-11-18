@@ -215,6 +215,7 @@ class KalboBot(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self):
+        # I-sync nang global ang tree
         await self.tree.sync()
         print("Slash commands synced successfully!")
 
