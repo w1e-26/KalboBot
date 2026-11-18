@@ -357,7 +357,7 @@ async def on_message(message):
         try:
             target_user_obj = await bot.fetch_user(int(target_user_id))
             await target_user_obj.send(memory_msg)
-            await message.channel.send(f"isinend ko na sa DM mo nang pribado ang mga alaala, <@{message.author.id}>!")
+            await message.channel.send(f"check dms! <@{message.author.id}>")
         except Exception as e:
             print(f"[DM Error]: {e}")
             await message.channel.send(f"hindi kita ma-DM, <@{message.author.id}>! baka naka-off ang DMs mo sa server na 'to.")
