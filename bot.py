@@ -257,8 +257,7 @@ async def on_message(message):
             "!kalboabt            - Learn more about the bot\n\n"
             "Memory guides\n"
             "Mention bot + remember <fact>   - Save a fact about yourself\n"
-            "Mention bot + tawagin mo akong - Set your preferred name\n\n"
-            "PANOT SI TOFU!\n"
+            "Mention bot + tawagin mo akong - Set your preferred name\n"
             "```"
         )
         await message.channel.send(help_text)
