@@ -203,7 +203,7 @@ class DeleteListView(discord.ui.View):
     @discord.ui.button(label="Done", style=discord.ButtonStyle.danger)
     async def delete_button_callback(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.edit_message(
-            content=f"<@{interaction.user.id}> used `!kalbolist`", 
+            content=f"<@{interaction.user.id}> closed the list", 
             view=None
         )
 
@@ -241,9 +241,9 @@ async def on_message(message):
         help_text = (
             "```yaml\n"
             "Bot commands\n"
-            "!kalbolist           - View your own custom attitude\n"
-            "!kalbolist all       - View list of all custom attitudes (creator only)\n"
-            "!kalbolist [user_id] - View specific user attitude (admin only)\n"
+            "!kalbolist           - View your own custom attitude (sent via DM)\n"
+            "!kalbolist all       - View list of all custom attitudes (creator only, sent via DM)\n"
+            "!kalbolist [user_id] - View specific user attitude (creator only, sent via DM)\n"
             "!kalbogali           - Set custom attitude \n"
             "!kalboreset          - Reset attitude to default \n"
             "!kalboglobal         - Set global base attitude (creator only)\n"
@@ -447,13 +447,13 @@ async def on_message(message):
                 response_msg = f"wala ka pang naka-set na custom attitude, <@{user_id}>. default ang gamit ko sa'yo!"
         
         else:
+            if message.author.id != CREATOR_ID:
+                await message.channel.send(f"ulol, <@{message.author.id}>, ang creator ko lang ang pwedeng gumamit ng `!kalbolist all` o sumilip sa iba!")
+                return
+
             sub_arg = parts[1].lower()
             
             if sub_arg == "all":
-                if message.author.id != CREATOR_ID:
-                    await message.channel.send(f"ulol, <@{message.author.id}>, ang creator ko lang ang pwedeng gumamit ng `!kalbolist all`!")
-                    return
-
                 cursor.execute("SELECT user_id, attitude FROM server_attitudes")
                 rows = cursor.fetchall()
                 
@@ -469,10 +469,6 @@ async def on_message(message):
                 if len(response_msg) > 2000:
                     response_msg = response_msg[:1990] + "\n...(putol na dahil sobrang haba)"
             else:
-                if message.author.id != CREATOR_ID:
-                    await message.channel.send(f"ulol, <@{message.author.id}>, ang creator ko lang ang pwedeng sumilip sa custom attitude ng ibang user!")
-                    return
-
                 search_match = re.search(r'(?:<@!?(\d+)>|(\d+))', parts[1])
                 if search_match:
                     search_id = search_match.group(1) or search_match.group(2)
@@ -486,8 +482,13 @@ async def on_message(message):
                 else:
                     response_msg = "mali ang format ng paghahanap, gago! gamitin ang `!kalbolist all` o `!kalbolist @user`."
 
-        view = DeleteListView()
-        await message.channel.send(response_msg, view=view)
+        try:
+            sender_obj = await bot.fetch_user(message.author.id)
+            await sender_obj.send(response_msg)
+            await message.channel.send(f"check dms! <@{message.author.id}>")
+        except Exception as e:
+            print(f"[DM Error]: {e}")
+            await message.channel.send(f"hindi kita ma-DM, <@{message.author.id}>! baka naka-off ang DMs mo sa server na 'to.")
         return
 
     if bot.user.mentioned_in(message):
