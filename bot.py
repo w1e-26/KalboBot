@@ -3,7 +3,7 @@ import discord
 import asyncio
 import re
 import psycopg2
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from google import genai
 from google.genai import types
 from openai import OpenAI
@@ -514,13 +514,14 @@ async def on_message(message):
         global_att = get_global_attitude()
         user_att = get_user_attitude(user_id)
         
-        current_time_str = datetime.now().strftime("%B %d, %Y (%A), %I:%M %p")
+        ph_tz = timezone(timedelta(hours=8))
+        current_time_str = datetime.now(ph_tz).strftime("%B %d, %Y (%A), %I:%M %p")
 
         prompt_instruction = (
             f"You are Kalbo (Joel Ravanera), a Filipino content creator from Cavite.\n\n"
             f"EXACT SYSTEM CLOCK & REAL-TIME CONTEXT:\n"
-            f"- Current Date and Time: {current_time_str}\n"
-            f"- Rule: Use this exact timestamp to compute any durations, countdowns, or date queries accurately without guessing, but DO NOT output this date/time unless explicitly asked.\n\n"
+            f"- Current Date and Time (Philippines / UTC+8): {current_time_str}\n"
+            f"- Rule: Use this exact timestamp (Philippine Standard Time) to compute any durations, countdowns, or date queries accurately without guessing, but DO NOT output this date/time unless explicitly asked.\n\n"
             f"GLOBAL BASE ATTITUDE (Ito ang pangunahing ugali, boses, at estilo mo sa pakikipag-usap):\n"
             f"- {global_att}\n\n"
             f"CURRENT USER CONTEXT:\n"
