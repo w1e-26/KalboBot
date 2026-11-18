@@ -169,7 +169,7 @@ class MemorySelect(discord.ui.Select):
             label = fact[:97] + "..." if len(fact) > 100 else fact
             options.append(discord.SelectOption(label=label, value=str(idx)))
             
-        super().__init__(placeholder="piliin ang memory na gusto mong burahin...", min_values=1, max_values=1, options=options)
+        super().__init__(placeholder="select the memory you want to delete...", min_values=1, max_values=1, options=options)
 
     async def callback(self, interaction: discord.Interaction):
         selected_index = int(self.values[0])
@@ -188,9 +188,9 @@ class MemorySelect(discord.ui.Select):
             """, (new_facts_str, self.target_user_id))
             conn.commit()
             
-            await interaction.response.edit_message(content=f"binura ko na ang memory na 'to: *{fact_to_remove}*", view=None)
+            await interaction.response.edit_message(content=f"deleted this memory: *{fact_to_remove}*", view=None)
         else:
-            await interaction.response.edit_message(content="walang mahanap na memory para sa user na 'to.", view=None)
+            await interaction.response.edit_message(content="no memory found for this user.", view=None)
 
 class MemorySelectView(discord.ui.View):
     def __init__(self, target_user_id: str, facts_list: list):
@@ -215,7 +215,6 @@ class KalboBot(discord.Client):
         self.tree = app_commands.CommandTree(self)
 
     async def setup_hook(self):
-        # I-sync nang global ang tree
         await self.tree.sync()
         print("Slash commands synced successfully!")
 
@@ -229,30 +228,30 @@ async def on_ready():
 # --- SLASH COMMAND GROUP: /kalbo ---
 kalbo_group = app_commands.Group(name="kalbo", description="kalbobot command suite")
 
-@kalbo_group.command(name="help", description="ipakita ang listahan ng commands")
+@kalbo_group.command(name="help", description="view help directory")
 async def kalbo_help(interaction: discord.Interaction):
     help_text = (
         "```yaml\n"
         "Bot slash commands (/kalbo ...)\n"
-        "help                 - View help directory\n"
-        "abt                  - Learn more about the bot\n"
+        "help                 - View help directory (ephemeral)\n"
+        "abt                  - Learn more about the bot (ephemeral)\n"
         "list [user]          - View your or someone's custom attitude (creator only, ephemeral)\n"
         "list-all             - View list of all custom attitudes (creator only, ephemeral)\n"
         "gali [user] [text]   - Set custom attitude\n"
         "reset [user]         - Reset attitude to default\n"
         "global set [text]    - Set global base attitude (creator only)\n"
-        "global show          - Show current global base attitude (creator only)\n"
+        "global show          - Show current global base attitude (creator only, ephemeral)\n"
         "global reset         - Reset global base attitude (creator only)\n"
         "memories [user]      - View stored facts and name (creator only for others, ephemeral)\n"
         "resetmem [user]      - Wipe out all memory\n"
-        "deletemem [user]     - Delete a specific memory\n"
+        "deletemem [user]     - Delete a specific memory (ephemeral)\n"
         "addadmin [user]      - Add a bot-level admin\n"
         "removeadmin [user]   - Remove a bot-level admin\n"
         "```"
     )
     await interaction.response.send_message(help_text, ephemeral=True)
 
-@kalbo_group.command(name="abt", description="tungkol kay kalbo")
+@kalbo_group.command(name="abt", description="learn more about the bot")
 async def kalbo_abt(interaction: discord.Interaction):
     abt_text = (
         f"this bot was created by: <@{CREATOR_ID}>\n\n"
@@ -260,12 +259,12 @@ async def kalbo_abt(interaction: discord.Interaction):
         "if you want to customize the bot yourself, here is the open source code:\n"
         "https://github.com/w1e-26/KalboBot"
     )
-    await interaction.response.send_message(abt_text)
+    await interaction.response.send_message(abt_text, ephemeral=True)
 
 # Global sub-group
 global_group = app_commands.Group(name="global", description="global attitude management", parent=kalbo_group)
 
-@global_group.command(name="show", description="ipakita ang current global attitude")
+@global_group.command(name="show", description="show current global base attitude")
 async def global_show(interaction: discord.Interaction):
     if interaction.user.id != CREATOR_ID:
         await interaction.response.send_message(f"ulol, <@{interaction.user.id}>, ang creator ko lang ang pwedeng makakita nito!", ephemeral=True)
@@ -273,7 +272,7 @@ async def global_show(interaction: discord.Interaction):
     current_global = get_global_attitude()
     await interaction.response.send_message(f"**current global base attitude:**\n> *{current_global}*", ephemeral=True)
 
-@global_group.command(name="reset", description="i-reset ang global attitude")
+@global_group.command(name="reset", description="reset global base attitude to default")
 async def global_reset(interaction: discord.Interaction):
     if interaction.user.id != CREATOR_ID:
         await interaction.response.send_message(f"ulol, <@{interaction.user.id}>, ang creator ko lang ang pwedeng mag-reset nito!", ephemeral=True)
@@ -281,8 +280,8 @@ async def global_reset(interaction: discord.Interaction):
     reset_global_attitude()
     await interaction.response.send_message("na-reset ko na ang global base attitude ko pabalik sa default, boss!", ephemeral=True)
 
-@global_group.command(name="set", description="baguhin ang global attitude")
-@app_commands.describe(attitude="ang bagong global base attitude")
+@global_group.command(name="set", description="set global base attitude")
+@app_commands.describe(attitude="the new global base attitude text")
 async def global_set(interaction: discord.Interaction, attitude: str):
     if interaction.user.id != CREATOR_ID:
         await interaction.response.send_message(f"ulol, <@{interaction.user.id}>, ang creator ko lang ang pwedeng magpalit nito!", ephemeral=True)
@@ -290,8 +289,8 @@ async def global_set(interaction: discord.Interaction, attitude: str):
     set_global_attitude(attitude)
     await interaction.response.send_message("na-update ko na ang global base attitude ko, boss!", ephemeral=True)
 
-@kalbo_group.command(name="list", description="tingnan ang custom attitude")
-@app_commands.describe(user="opsiyonal: user na titingnan (creator only)")
+@kalbo_group.command(name="list", description="view your or someone's custom attitude")
+@app_commands.describe(user="optional: target user to view (creator only)")
 async def kalbo_list(interaction: discord.Interaction, user: discord.Member = None):
     if user:
         if interaction.user.id != CREATOR_ID:
@@ -306,12 +305,12 @@ async def kalbo_list(interaction: discord.Interaction, user: discord.Member = No
 
     att = get_user_attitude(target_id)
     if att:
-        msg = f"**custom attitude para kay <@{target_id}>:**\n> *{att}*"
+        msg = f"**custom attitude for <@{target_id}>:**\n> *{att}*"
     else:
-        msg = f"wala pang naka-set na custom attitude si <@{target_id}>."
+        msg = f"no custom attitude set for <@{target_id}>."
     await interaction.response.send_message(msg, ephemeral=True)
 
-@kalbo_group.command(name="list-all", description="tingnan ang lahat ng custom attitudes (creator only)")
+@kalbo_group.command(name="list-all", description="view list of all custom attitudes")
 async def kalbo_list_all(interaction: discord.Interaction):
     if interaction.user.id != CREATOR_ID:
         await interaction.response.send_message(f"ulol, <@{interaction.user.id}>, ang creator ko lang ang pwedeng gumamit nito!", ephemeral=True)
@@ -323,15 +322,15 @@ async def kalbo_list_all(interaction: discord.Interaction):
         await interaction.response.send_message("wala pa akong naka-set na custom attitudes sa database, gago.", ephemeral=True)
         return
 
-    msg = "**listahan ng lahat ng custom attitudes ni kalbo:**\n"
+    msg = "**list of all custom attitudes:**\n"
     for u_id, att in rows:
         msg += f"- <@{u_id}> (ID: `{u_id}`):\n  > *{att}*\n\n"
     if len(msg) > 2000:
-        msg = msg[:1990] + "\n...(putol na)"
+        msg = msg[:1990] + "\n...(truncated)"
     await interaction.response.send_message(msg, ephemeral=True)
 
-@kalbo_group.command(name="gali", description="magtakda ng custom attitude")
-@app_commands.describe(attitude="ang bagong ugali", user="opsiyonal: para sa ibang user (admin only)")
+@kalbo_group.command(name="gali", description="set custom attitude")
+@app_commands.describe(attitude="the new custom attitude", user="optional: target user (admin only)")
 async def kalbo_gali(interaction: discord.Interaction, attitude: str, user: discord.Member = None):
     if user:
         if not is_bot_admin(interaction.user):
@@ -344,8 +343,8 @@ async def kalbo_gali(interaction: discord.Interaction, attitude: str, user: disc
     set_user_attitude(target_id, attitude)
     await interaction.response.send_message(f"na-update ko na ang ugali ko kay <@{target_id}>, boss!")
 
-@kalbo_group.command(name="reset", description="i-reset ang custom attitude")
-@app_commands.describe(user="opsiyonal: para sa ibang user (admin only)")
+@kalbo_group.command(name="reset", description="reset custom attitude to default")
+@app_commands.describe(user="optional: target user (admin only)")
 async def kalbo_reset(interaction: discord.Interaction, user: discord.Member = None):
     if user:
         if not is_bot_admin(interaction.user):
@@ -359,8 +358,8 @@ async def kalbo_reset(interaction: discord.Interaction, user: discord.Member = N
     conn.commit()
     await interaction.response.send_message(f"binura ko na ang special treatment kay <@{target_id}>, balik sa dati 'yan!")
 
-@kalbo_group.command(name="memories", description="tingnan ang stored memories (ephemeral)")
-@app_commands.describe(user="opsiyonal: tignan ang memory ng iba (creator only)")
+@kalbo_group.command(name="memories", description="view stored facts and preferred name")
+@app_commands.describe(user="optional: target user memory (creator only)")
 async def kalbo_memories(interaction: discord.Interaction, user: discord.Member = None):
     if user:
         if interaction.user.id != CREATOR_ID:
@@ -371,14 +370,14 @@ async def kalbo_memories(interaction: discord.Interaction, user: discord.Member 
         target_id = str(interaction.user.id)
 
     pref_name, facts = get_user_profile(target_id)
-    memory_msg = f"**stored memories para kay <@{target_id}>:**\n"
+    memory_msg = f"**stored memories for <@{target_id}>:**\n"
     memory_msg += f"- **preferred name:** {pref_name if pref_name else 'none set'}\n"
     memory_msg += f"- **saved facts:** {facts if facts else 'no facts recorded yet.'}\n"
     
     await interaction.response.send_message(memory_msg, ephemeral=True)
 
-@kalbo_group.command(name="resetmem", description="burahin lahat ng memory")
-@app_commands.describe(user="opsiyonal: para sa ibang user (admin only)")
+@kalbo_group.command(name="resetmem", description="wipe out all memory for user")
+@app_commands.describe(user="optional: target user (admin only)")
 async def kalbo_resetmem(interaction: discord.Interaction, user: discord.Member = None):
     if user:
         if not is_bot_admin(interaction.user):
@@ -392,8 +391,8 @@ async def kalbo_resetmem(interaction: discord.Interaction, user: discord.Member 
     conn.commit()
     await interaction.response.send_message(f"winiswit ko na ang utak ko, burado na lahat ng alaala at pangalan ni <@{target_id}>!")
 
-@kalbo_group.command(name="deletemem", description="burahin ang isang tiyak na memory")
-@app_commands.describe(user="opsiyonal: para sa ibang user (admin only)")
+@kalbo_group.command(name="deletemem", description="delete a specific memory item")
+@app_commands.describe(user="optional: target user (admin only)")
 async def kalbo_deletemem(interaction: discord.Interaction, user: discord.Member = None):
     if user:
         if not is_bot_admin(interaction.user):
@@ -410,10 +409,10 @@ async def kalbo_deletemem(interaction: discord.Interaction, user: discord.Member
         
     facts_list = [f.strip() for f in facts.split("|")]
     view = MemorySelectView(target_id, facts_list)
-    await interaction.response.send_message(f"piliin sa ibaba kung aling memory ang gusto mong burahin kay <@{target_id}>:", view=view, ephemeral=True)
+    await interaction.response.send_message(f"select below which memory to delete for <@{target_id}>:", view=view, ephemeral=True)
 
-@kalbo_group.command(name="addadmin", description="magdagdag ng bot admin (server admin only)")
-@app_commands.describe(user="ang user na gagawing admin")
+@kalbo_group.command(name="addadmin", description="add a bot-level admin")
+@app_commands.describe(user="the user to grant admin access")
 async def kalbo_addadmin(interaction: discord.Interaction, user: discord.Member):
     if not interaction.user.guild_permissions.administrator and interaction.user.id != CREATOR_ID:
         await interaction.response.send_message(f"gago ka ba, <@{interaction.user.id}>? server admin lang ang pwedeng magdagdag ng bot admin!", ephemeral=True)
@@ -423,8 +422,8 @@ async def kalbo_addadmin(interaction: discord.Interaction, user: discord.Member)
     conn.commit()
     await interaction.response.send_message(f"nilista ko na si <@{user.id}> bilang bot admin, boss!")
 
-@kalbo_group.command(name="removeadmin", description="tanggalin ang bot admin access")
-@app_commands.describe(user="ang user na tatanggalan ng admin")
+@kalbo_group.command(name="removeadmin", description="remove a bot-level admin")
+@app_commands.describe(user="the user to revoke admin access")
 async def kalbo_removeadmin(interaction: discord.Interaction, user: discord.Member):
     if user.id == CREATOR_ID:
         await interaction.response.send_message(f"ulol, <@{interaction.user.id}>! hinding-hindi ko pwedeng tanggalin ang creator ko bilang admin!", ephemeral=True)
