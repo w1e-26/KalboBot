@@ -242,14 +242,14 @@ async def on_message(message):
             "```yaml\n"
             "Bot commands\n"
             "!kalbolist           - View your own custom attitude\n"
-            "!kalbolist all       - View list of all custom attitudes (admin only)\n"
+            "!kalbolist all       - View list of all custom attitudes (creator only)\n"
             "!kalbolist [user_id] - View specific user attitude (admin only)\n"
             "!kalbogali           - Set custom attitude \n"
             "!kalboreset          - Reset attitude to default \n"
             "!kalboglobal         - Set global base attitude (creator only)\n"
             "!kalboglobalshow     - Show current global base attitude (creator only)\n"
             "!kalboglobalreset    - Reset global base attitude to default (creator only)\n"
-            "!kalbomemories       - View stored facts and name of a user \n"
+            "!kalbomemories       - View stored facts and name (sent privately via DM)\n"
             "!kalboresetmem       - Wipe out all memory \n"
             "!kalbodeletemem      - Delete a specific memory \n"
             "!kalboaddadmin       - Add a bot-level admin (Server Admin)\n"
@@ -343,8 +343,8 @@ async def on_message(message):
         match = re.search(r'!kalbomemories\s+<@!?(\d+)>', content_raw)
         if match:
             target_user_id = match.group(1)
-            if not is_bot_admin(message.author):
-                await message.channel.send(f"ulol, <@{message.author.id}>, bawal mong silipin ang utak ng iba!")
+            if message.author.id != CREATOR_ID:
+                await message.channel.send(f"ulol, <@{message.author.id}>, ang creator ko lang ang pwedeng sumilip sa memory ng ibang user!")
                 return
         else:
             target_user_id = str(message.author.id)
@@ -353,7 +353,14 @@ async def on_message(message):
         memory_msg = f"**stored memories for <@{target_user_id}>:**\n"
         memory_msg += f"- **preferred name:** {pref_name if pref_name else 'none set'}\n"
         memory_msg += f"- **saved facts:** {facts if facts else 'no facts recorded yet.'}\n"
-        await message.channel.send(memory_msg)
+        
+        try:
+            target_user_obj = await bot.fetch_user(int(target_user_id))
+            await target_user_obj.send(memory_msg)
+            await message.channel.send(f"isinend ko na sa DM mo nang pribado ang mga alaala, <@{message.author.id}>!")
+        except Exception as e:
+            print(f"[DM Error]: {e}")
+            await message.channel.send(f"hindi kita ma-DM, <@{message.author.id}>! baka naka-off ang DMs mo sa server na 'to.")
         return
 
     if content_lower.startswith("!kalboresetmem"):
@@ -411,7 +418,7 @@ async def on_message(message):
         if match:
             target_user_id = match.group(1)
             if int(target_user_id) == CREATOR_ID:
-                await message.channel.send(f"ulol, <@{message.author.id}>! hinding-hindi mo pwedeng tanggalin ang creator ko bilang admin!")
+                await message.channel.send(f"ulol, <@{message.author.id}>! hinding-hindi ko pwedeng tanggalin ang creator ko bilang admin!")
                 return
         
         if not message.author.guild_permissions.administrator and message.author.id != CREATOR_ID:
@@ -440,13 +447,13 @@ async def on_message(message):
                 response_msg = f"wala ka pang naka-set na custom attitude, <@{user_id}>. default ang gamit ko sa'yo!"
         
         else:
-            if not is_bot_admin(message.author):
-                await message.channel.send(f"ulol, <@{message.author.id}>, pampamilya/pampinuno lang ang `!kalbolist all` o paghahanap ng iba!")
-                return
-
             sub_arg = parts[1].lower()
             
             if sub_arg == "all":
+                if message.author.id != CREATOR_ID:
+                    await message.channel.send(f"ulol, <@{message.author.id}>, ang creator ko lang ang pwedeng gumamit ng `!kalbolist all`!")
+                    return
+
                 cursor.execute("SELECT user_id, attitude FROM server_attitudes")
                 rows = cursor.fetchall()
                 
@@ -462,6 +469,10 @@ async def on_message(message):
                 if len(response_msg) > 2000:
                     response_msg = response_msg[:1990] + "\n...(putol na dahil sobrang haba)"
             else:
+                if message.author.id != CREATOR_ID:
+                    await message.channel.send(f"ulol, <@{message.author.id}>, ang creator ko lang ang pwedeng sumilip sa custom attitude ng ibang user!")
+                    return
+
                 search_match = re.search(r'(?:<@!?(\d+)>|(\d+))', parts[1])
                 if search_match:
                     search_id = search_match.group(1) or search_match.group(2)
@@ -534,9 +545,9 @@ async def on_message(message):
             f"1. Kung may Preferred Name ang user (e.g. Master Wi), tawagin mo siya sa pangalang 'yun at HUWAG mong i-mention ang kanyang Discord ID o username.\n"
             f"2. Kung WALANG Preferred Name, i-mention mo siya gamit ang <@{user_id}>.\n"
             f"3. HUWAG na HUWAG mong pagsasabayin ang Preferred Name at ang <@USER_ID> sa isang sagot.\n\n"
-            f"FORMATTING RULE:\n"
-            f"- ALL LETTERS MUST BE IN LOWERCASE ONLY. No capital letters at all, no formal typing, type like a regular person chatting casually in a discord channel.\n\n"
-            f"- strict language override: any numbers (e.g. one, two, 100), dates (e.g. november, january), and days of the week (e.g. monday, friday) must be written in pure english words/formats only. never translate days, months, or numbers into tagalog (e.g. do not use 'lunes', 'diyes', etc.).\n\n"
+            f"LANGUAGE & FORMATTING RULE:\n"
+            f"- ALL LETTERS MUST BE IN LOWERCASE ONLY. No capital letters at all, no formal typing, type like a regular person chatting casually in a discord channel.\n"
+            f"- STRICT LANGUAGE OVERRIDE: Any numbers (e.g. one, two, 100), dates (e.g. november, january), and days of the week (e.g. monday, friday) MUST be written in pure English words/formats only. Never translate days, months, or numbers into Tagalog (e.g. do not use 'lunes', 'diyes', etc.).\n\n"
             f"Instruction: Sagutin nang tama at tumpak ang tanong. Sundin nang buo ang GLOBAL BASE ATTITUDE sa itaas. Huwag sabihin ang petsa o oras maliban na lang kung tinanong. Keep it strictly to 1-2 short sentences maximum. Huwag mag overreact pero panatilihing kupal at may mura."
         )
 
